@@ -1,0 +1,167 @@
+# Streaming API Documentation
+
+# Schemas
+components:
+  schemas:
+    StreamInfo:
+      type: object
+      properties:
+        rtmpUrl:
+          type: string
+          description: RTMP server URL for streaming
+          example: "rtmp://your-server-url/live"
+        streamKey:
+          type: string
+          description: Unique stream key for the broadcast
+          example: "stream_1234567890"
+        status:
+          type: string
+          enum: ["idle", "live", "error", "offline"]
+          description: Current status of the stream
+        startedAt:
+          type: string
+          format: date-time
+          description: Timestamp when the stream started
+        viewers:
+          type: integer
+          description: Number of current viewers
+          minimum: 0
+
+    StreamStartRequest:
+      type: object
+      required:
+        - rtmpUrl
+        - streamKey
+      properties:
+        rtmpUrl:
+          $ref: '#/components/schemas/StreamInfo/properties/rtmpUrl'
+        streamKey:
+          $ref: '#/components/schemas/StreamInfo/properties/streamKey'
+
+    StreamStatusResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          description: Indicates if the operation was successful
+        data:
+          $ref: '#/components/schemas/StreamInfo'
+
+# Paths
+paths:
+  /streaming/start/{matchId}:
+    post:
+      tags:
+        - Streaming
+      summary: Start a live stream for a match
+      description: Start streaming a match with the provided RTMP URL and stream key
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: matchId
+          required: true
+          schema:
+            type: string
+          description: ID of the match to stream
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StreamStartRequest'
+      responses:
+        '200':
+          description: Stream started successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StreamStatusResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          description: User does not have permission to stream this match
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /streaming/stop/{streamId}:
+    post:
+      tags:
+        - Streaming
+      summary: Stop a live stream
+      description: Stop an active stream by its ID
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: streamId
+          required: true
+          schema:
+            type: string
+          description: ID of the stream to stop
+      responses:
+        '200':
+          description: Stream stopped successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  message:
+                    type: string
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          description: User does not have permission to stop this stream
+        '404':
+          description: Stream not found or already stopped
+
+  /streaming/status/{streamId}:
+    get:
+      tags:
+        - Streaming
+      summary: Get stream status
+      description: Get the current status of a stream
+      parameters:
+        - in: path
+          name: streamId
+          required: true
+          schema:
+            type: string
+          description: ID of the stream to check
+      responses:
+        '200':
+          description: Stream status retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StreamStatusResponse'
+        '404':
+          description: Stream not found
+
+  /streaming/active:
+    get:
+      tags:
+        - Streaming
+      summary: Get all active streams
+      description: Returns a list of all currently active streams
+      responses:
+        '200':
+          description: List of active streams
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  count:
+                    type: integer
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/StreamInfo'

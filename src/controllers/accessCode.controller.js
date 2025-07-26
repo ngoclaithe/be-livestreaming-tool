@@ -1,0 +1,499 @@
+const { Op, Sequelize } = require('sequelize');
+const AccessCode = require('../models/AccessCode');
+const Match = require('../models/Match');
+const ApiError = require('../utils/ApiError');
+const { StatusCodes } = require('http-status-codes');
+const logger = require('../utils/logger');
+const { sequelize } = require('../config/database');
+
+/**
+ * @desc    Tạo mới access code và match (nếu chưa có matchId)
+ * @route   POST /api/v1/access-codes
+ * @access  Private
+ */
+exports.createAccessCode = async (req, res, next) => {
+  const transaction = await sequelize.transaction();
+  
+  try {
+    const { 
+      matchId, 
+      expiresAt, 
+      maxUses = 1, 
+      metadata = {},
+      typeMatch = 'soccer',
+      teamAName = 'Team A',
+      teamBName = 'Team B',
+      teamALogo = '/images/default-team-logo.png',
+      teamBLogo = '/images/default-team-logo.png',
+      tournamentName = '',
+      tournamentLogo = ''
+    } = req.body;
+
+    let match;
+    
+    // Nếu không có matchId, tạo mới một match
+    if (!matchId) {
+      match = await Match.create({
+        teamAName,
+        teamBName,
+        teamALogo,
+        teamBLogo,
+        tournamentName,
+        tournamentLogo,
+        typeMatch,
+        createdBy: req.user.id, // Thêm createdBy
+        matchDate: new Date(), // Ngày hiện tại làm mặc định
+        status: 'upcoming',
+        // Các trường thống kê để trống
+        homeScore: 0,
+        awayScore: 0,
+        possession: { home: 50, away: 50 },
+        shots: { home: 0, away: 0 },
+        shotsOnTarget: { home: 0, away: 0 },
+        corners: { home: 0, away: 0 },
+        fouls: { home: 0, away: 0 },
+        offsides: { home: 0, away: 0 },
+        yellowCards: { home: 0, away: 0 },
+        redCards: { home: 0, away: 0 }
+      }, { transaction });
+    }
+
+    // Tạo mới access code
+    const accessCode = await AccessCode.create({
+      code: AccessCode.generateCode(),
+      status: 'active',
+      createdBy: req.user.id,
+      matchId: matchId || match.id, // Sử dụng matchId từ request hoặc match vừa tạo
+      expiresAt: expiresAt ? new Date(expiresAt) : null,
+      maxUses,
+      usageCount: 0,
+      metadata
+    }, { transaction });
+
+    // Commit transaction nếu mọi thứ thành công
+    await transaction.commit();
+
+    // Nếu có tạo mới match, thêm thông tin match vào response
+    const response = {
+      success: true,
+      data: accessCode.toJSON()
+    };
+
+    if (match) {
+      response.match = match.toJSON();
+    }
+
+    res.status(StatusCodes.CREATED).json(response);
+  } catch (error) {
+    // Rollback transaction nếu có lỗi
+    await transaction.rollback();
+    logger.error(`Create access code error: ${error.message}`);
+    next(error);
+  }
+};
+
+/**
+ * @desc    Cập nhật thông tin trận đấu của access code
+ * @route   PUT /api/v1/access-codes/:code/match
+ * @access  Private
+ */
+exports.updateMatchInfo = async (req, res, next) => {
+  const transaction = await sequelize.transaction();
+  
+  try {
+    const { code } = req.params;
+    const {
+      teamAName,
+      teamBName,
+      teamALogo,
+      teamBLogo,
+      tournamentName,
+      tournamentLogo,
+      typeMatch,
+      matchDate
+    } = req.body;
+
+    // Tìm access code
+    const accessCode = await AccessCode.findOne({
+      where: { code },
+      include: [{
+        model: Match,
+        as: 'match'
+      }]
+    });
+
+    if (!accessCode) {
+      throw new ApiError(StatusCodes.NOT_FOUND, 'Access code không tồn tại');
+    }
+
+    if (!accessCode.match) {
+      throw new ApiError(StatusCodes.NOT_FOUND, 'Không tìm thấy thông tin trận đấu');
+    }
+
+    // Cập nhật thông tin trận đấu
+    const updateData = {};
+    if (teamAName) updateData.teamAName = teamAName;
+    if (teamBName) updateData.teamBName = teamBName;
+    if (teamALogo) updateData.teamALogo = teamALogo;
+    if (teamBLogo) updateData.teamBLogo = teamBLogo;
+    if (tournamentName) updateData.tournamentName = tournamentName;
+    if (tournamentLogo) updateData.tournamentLogo = tournamentLogo;
+    if (typeMatch) updateData.typeMatch = typeMatch;
+    if (matchDate) updateData.matchDate = new Date(matchDate);
+
+    await accessCode.match.update(updateData, { transaction });
+    await transaction.commit();
+
+    res.status(StatusCodes.OK).json({
+      success: true,
+      data: {
+        ...accessCode.match.toJSON(),
+        matchName: accessCode.match.matchName // Đảm bảo trả về matchName đã được tính toán
+      }
+    });
+  } catch (error) {
+    await transaction.rollback();
+    next(error);
+  }
+};
+
+/**
+ * @desc    Lấy thông tin trận đấu của access code
+ * @route   GET /api/v1/access-codes/:code/match
+ * @access  Private
+ */
+exports.getMatchInfo = async (req, res, next) => {
+  try {
+    const { code } = req.params;
+
+    const accessCode = await AccessCode.findOne({
+      where: { code },
+      include: [{
+        model: Match,
+        as: 'match'
+      }]
+    });
+
+    if (!accessCode) {
+      throw new ApiError(StatusCodes.NOT_FOUND, 'Access code không tồn tại');
+    }
+
+    if (!accessCode.match) {
+      throw new ApiError(StatusCodes.NOT_FOUND, 'Không tìm thấy thông tin trận đấu');
+    }
+
+    res.status(StatusCodes.OK).json({
+      success: true,
+      data: {
+        ...accessCode.match.toJSON(),
+        matchName: accessCode.match.matchName // Đảm bảo trả về matchName đã được tính toán
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * @desc    Lấy danh sách access codes
+ * @route   GET /api/v1/access-codes
+ * @access  Private
+ */
+exports.getAccessCodes = async (req, res, next) => {
+  // Check if response was already sent
+  if (res.headersSent) {
+    logger.warn('Response already sent, aborting getAccessCodes');
+    return;
+  }
+
+  try {
+    const { status, matchId, createdBy, page = 1, limit = 10 } = req.query;
+    
+    // Validate input
+    const pageNum = parseInt(page, 10) || 1;
+    const limitNum = parseInt(limit, 10) || 10;
+    
+    if (pageNum < 1 || limitNum < 1) {
+      return next(new ApiError('Số trang và giới hạn phải lớn hơn 0', StatusCodes.BAD_REQUEST));
+    }
+
+    const where = {};
+    
+    // Filter by status - only add if status is valid
+    if (status && status !== 'undefined' && status !== 'null' && status !== '') {
+      where.status = status;
+    } else if (status === '') {
+      // If status is empty string, don't filter by status
+      delete where.status;
+    }
+    
+    // Filter by matchId
+    if (matchId) {
+      where.matchId = matchId;
+    }
+    
+    // Filter by creator
+    if (createdBy) {
+      where.createdBy = createdBy;
+    }
+    
+    // For non-admin users, only show their own codes or codes related to their matches
+    if (req.user.role !== 'admin') {
+      try {
+        const userMatches = await Match.findAll({
+          where: { createdBy: req.user.id },
+          attributes: ['id']
+        });
+        
+        const userMatchIds = userMatches.map(match => match.id);
+        
+        if (userMatchIds.length === 0) {
+          where.createdBy = req.user.id;
+        } else {
+          where[Op.or] = [
+            { createdBy: req.user.id },
+            { matchId: { [Op.in]: userMatchIds } }
+          ];
+        }
+      } catch (dbError) {
+        logger.error(`Error fetching user matches: ${dbError.message}`);
+        return next(new ApiError('Lỗi khi tải dữ liệu', StatusCodes.INTERNAL_SERVER_ERROR));
+      }
+    }
+
+    // Check if response was already sent (double check)
+    if (res.headersSent) {
+      logger.warn('Response already sent before database query');
+      return;
+    }
+
+    // Execute paginated query
+    const { count, rows: accessCodes } = await AccessCode.findAndCountAll({
+      where,
+      order: [['createdAt', 'DESC']],
+      limit: limitNum,
+      offset: (pageNum - 1) * limitNum
+    });
+
+    // Get match info for each access code
+    const accessCodesWithMatch = [];
+    
+    for (const accessCode of accessCodes) {
+      try {
+        let matchInfo = null;
+        if (accessCode.matchId) {
+          const match = await Match.findByPk(accessCode.matchId, {
+            attributes: ['id', 'teamAName', 'teamBName', 'typeMatch', 'matchDate', 'status']
+          });
+          matchInfo = match ? match.toJSON() : null;
+        }
+        accessCodesWithMatch.push({
+          ...accessCode.toJSON(),
+          match: matchInfo
+        });
+      } catch (matchError) {
+        logger.error(`Error fetching match for access code ${accessCode.id}: ${matchError.message}`);
+        accessCodesWithMatch.push({
+          ...accessCode.toJSON(),
+          match: null
+        });
+      }
+    }
+
+    // Final check before sending response
+    if (res.headersSent) {
+      logger.warn('Response already sent before sending final response');
+      return;
+    }
+
+    // Send response
+    return res.status(StatusCodes.OK).json({
+      success: true,
+      count,
+      data: accessCodesWithMatch,
+      pagination: {
+        currentPage: pageNum,
+        totalPages: Math.ceil(count / limitNum),
+        totalItems: count,
+        itemsPerPage: limitNum
+      }
+    });
+      
+  } catch (error) {
+    if (res.headersSent) {
+      logger.error('Error occurred but headers already sent:', error);
+      return;
+    }
+    logger.error(`Unexpected error in getAccessCodes: ${error.message}`, { error });
+    return next(new ApiError('Đã xảy ra lỗi không mong muốn', StatusCodes.INTERNAL_SERVER_ERROR));
+  }
+};
+
+/**
+ * @desc    Lấy thông tin chi tiết access code
+ * @route   GET /api/v1/access-codes/:code
+ * @access  Private
+ */
+exports.getAccessCode = async (req, res, next) => {
+  try {
+    const accessCode = await AccessCode.findOne({
+      where: { code: req.params.code },
+      include: [{
+        model: Match,
+        as: 'match'
+      }]
+    });
+
+    if (!accessCode) {
+      return next(new ApiError('Không tìm thấy access code', StatusCodes.NOT_FOUND));
+    }
+
+    // Kiểm tra quyền truy cập
+    if (accessCode.createdBy !== req.user.id && req.user.role !== 'admin') {
+      return next(new ApiError('Không có quyền truy cập access code này', StatusCodes.FORBIDDEN));
+    }
+
+    res.status(StatusCodes.OK).json({
+      success: true,
+      data: accessCode
+    });
+  } catch (error) {
+    logger.error(`Get access code error: ${error.message}`);
+    next(error);
+  }
+};
+
+/**
+ * @desc    Cập nhật access code
+ * @route   PUT /api/v1/access-codes/:id
+ * @access  Private
+ */
+exports.updateAccessCode = async (req, res, next) => {
+  try {
+    const accessCode = await AccessCode.findByPk(req.params.id);
+
+    if (!accessCode) {
+      return next(new ApiError('Không tìm thấy access code', StatusCodes.NOT_FOUND));
+    }
+
+    // Kiểm tra quyền sở hữu
+    if (accessCode.createdBy !== req.user.id && req.user.role !== 'admin') {
+      return next(new ApiError('Không có quyền cập nhật access code này', StatusCodes.FORBIDDEN));
+    }
+
+    const { status, expiresAt, maxUses, metadata } = req.body;
+    
+    // Kiểm tra giá trị status hợp lệ
+    const validStatuses = ['active', 'used', 'expired', 'revoked'];
+    if (status) {
+      if (!validStatuses.includes(status)) {
+        return next(new ApiError(`Trạng thái không hợp lệ. Các giá trị cho phép: ${validStatuses.join(', ')}`, StatusCodes.BAD_REQUEST));
+      }
+      accessCode.status = status;
+    }
+    if (expiresAt) accessCode.expiresAt = new Date(expiresAt);
+    if (maxUses !== undefined) accessCode.maxUses = maxUses;
+    if (metadata) accessCode.metadata = { ...accessCode.metadata, ...metadata };
+    
+    await accessCode.save();
+
+    res.status(StatusCodes.OK).json({
+      success: true,
+      data: accessCode
+    });
+  } catch (error) {
+    logger.error(`Update access code error: ${error.message}`);
+    next(error);
+  }
+};
+
+/**
+ * @desc    Xóa access code
+ * @route   DELETE /api/v1/access-codes/:id
+ * @access  Private
+ */
+exports.deleteAccessCode = async (req, res, next) => {
+  try {
+    const accessCode = await AccessCode.findByPk(req.params.id);
+
+    if (!accessCode) {
+      return next(new ApiError('Không tìm thấy access code', StatusCodes.NOT_FOUND));
+    }
+
+    // Kiểm tra quyền sở hữu
+    if (accessCode.createdBy !== req.user.id && req.user.role !== 'admin') {
+      return next(new ApiError('Không có quyền xóa access code này', StatusCodes.FORBIDDEN));
+    }
+
+    await accessCode.destroy();
+
+    res.status(StatusCodes.OK).json({
+      success: true,
+      message: 'Đã xóa access code thành công',
+      data: {}
+    });
+  } catch (error) {
+    logger.error(`Delete access code error: ${error.message}`);
+    next(error);
+  }
+};
+
+/**
+ * @desc    Sử dụng access code
+ * @route   POST /api/v1/access-codes/:code/use
+ * @access  Private
+ */
+exports.useAccessCode = async (req, res, next) => {
+  try {
+    const accessCode = await AccessCode.findOne({
+      where: { code: req.params.code }
+    });
+
+    if (!accessCode) {
+      return next(new ApiError('Access code không hợp lệ', StatusCodes.NOT_FOUND));
+    }
+
+    // Kiểm tra trạng thái code
+    if (accessCode.status !== 'active') {
+      return next(new ApiError('Access code không còn hiệu lực', StatusCodes.BAD_REQUEST));
+    }
+
+    // Kiểm tra hạn sử dụng
+    if (accessCode.expiresAt && new Date() > new Date(accessCode.expiresAt)) {
+      accessCode.status = 'expired';
+      await accessCode.save();
+      return next(new ApiError('Access code đã hết hạn', StatusCodes.BAD_REQUEST));
+    }
+
+    // Kiểm tra số lần sử dụng
+    if (accessCode.usageCount >= accessCode.maxUses) {
+      accessCode.status = 'used';
+      await accessCode.save();
+      return next(new ApiError('Access code đã đạt giới hạn sử dụng', StatusCodes.BAD_REQUEST));
+    }
+
+    // Cập nhật số lần sử dụng
+    accessCode.usageCount += 1;
+    accessCode.lastUsedAt = new Date();
+    accessCode.usedBy = req.user.id;
+    
+    // Nếu đã đạt giới hạn sử dụng, đánh dấu là đã dùng hết
+    if (accessCode.usageCount >= accessCode.maxUses) {
+      accessCode.status = 'used';
+    }
+    
+    await accessCode.save();
+
+    res.status(StatusCodes.OK).json({
+      success: true,
+      message: 'Sử dụng access code thành công',
+      data: {
+        matchId: accessCode.matchId,
+        remainingUses: accessCode.maxUses - accessCode.usageCount
+      }
+    });
+  } catch (error) {
+    logger.error(`Use access code error: ${error.message}`);
+    next(error);
+  }
+};
