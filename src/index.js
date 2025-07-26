@@ -21,14 +21,13 @@ const { errorHandler, notFound } = require('./middleware/error.middleware');
 const app = express();
 const httpServer = createServer(app);
 
-// Initialize Socket.IO
-const io = new Server(httpServer, {
-  cors: {
-    origin: config.cors.origin,
-    methods: ['GET', 'POST'],
-    credentials: true
-  }
-});
+// Initialize Socket.IO with config
+const io = new Server(httpServer, config.websocket);
+
+// Initialize WebSocket Service
+const WebSocketService = require('./services/websocket.service');
+const webSocketService = new WebSocketService(io);
+webSocketService.initialize();
 
 try {
   // Swagger documentation
@@ -146,34 +145,11 @@ if (config.fileUpload && config.fileUpload.uploadDir) {
   }));
 }
 
-// ENHANCED: Socket.IO with better error handling
-const setupSocketIO = (io) => {
-  io.on('connection', (socket) => {
-    logger.info(`New socket connection: ${socket.id}`);
     
-    // Add connection metadata
-    socket.on('authenticate', (data) => {
-      // Handle socket authentication here
-      logger.info(`Socket ${socket.id} authenticated:`, data?.userId || 'anonymous');
-    });
-    
-    socket.on('disconnect', (reason) => {
-      logger.info(`Socket disconnected: ${socket.id}, reason: ${reason}`);
-    });
-    
-    socket.on('error', (error) => {
-      logger.error(`Socket error on ${socket.id}:`, error);
-    });
-    
-    // Add your socket event handlers here
-  });
-
-  io.engine.on('connection_error', (err) => {
-    logger.error('Socket.IO connection error:', err);
-  });
-};
-
-setupSocketIO(io);
+// WebSocket error handling
+io.engine.on('connection_error', (err) => {
+  logger.error('Socket.IO connection error:', err);
+});
 
 // ENHANCED: Make io accessible to routes with better error handling
 app.use((req, res, next) => {

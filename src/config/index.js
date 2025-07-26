@@ -17,12 +17,30 @@ const jwt = {
   refreshExpiresIn: process.env.JWT_REFRESH_EXPIRES_IN || '7d'
 };
 
+// WebSocket Configuration
+const websocket = {
+  path: process.env.WS_PATH || '/socket.io',
+  pingTimeout: parseInt(process.env.WS_PING_TIMEOUT || '5000', 10),
+  pingInterval: parseInt(process.env.WS_PING_INTERVAL || '25000', 10),
+  maxHttpBufferSize: parseInt(process.env.WS_MAX_HTTP_BUFFER_SIZE || '1e8', 10), // 100MB
+  cors: {
+    origin: '*', // Chấp nhận từ mọi nguồn
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
+    credentials: true
+  },
+  transports: ['websocket', 'polling'],
+  allowUpgrades: true,
+  serveClient: false
+};
+
 // CORS Configuration
 const cors = {
-  origin: process.env.CORS_ORIGIN || '*',
-  allowedOrigins: process.env.CORS_ALLOWED_ORIGINS ? 
-    process.env.CORS_ALLOWED_ORIGINS.split(',') : 
-    ['http://localhost:3000', 'http://localhost:5000']
+  origin: '*', // Cho phép tất cả các nguồn
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  credentials: true,
+  optionsSuccessStatus: 200
 };
 
 // File Upload Configuration
