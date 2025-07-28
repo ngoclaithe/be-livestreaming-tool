@@ -21,13 +21,63 @@ const { errorHandler, notFound } = require('./middleware/error.middleware');
 const app = express();
 const httpServer = createServer(app);
 
-// Initialize Socket.IO with config
-const io = new Server(httpServer, config.websocket);
+// Cấu hình CORS cho phép tất cả origins
+app.use(cors({
+  origin: true, // Cho phép tất cả origins
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin'],
+  credentials: true,
+  optionsSuccessStatus: 200,
+  preflightContinue: false
+}));
+
+// Khởi tạo Socket.IO với cấu hình cho phép tất cả origins
+const io = new Server(httpServer, {
+  cors: {
+    origin: true, // Cho phép tất cả origins
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin'],
+    credentials: true
+  },
+  path: '/socket.io',
+  transports: ['websocket', 'polling'],
+  pingTimeout: 60000,
+  pingInterval: 25000,
+  allowEIO3: true,
+  maxHttpBufferSize: 1e8, // 100MB
+  allowUpgrades: true,
+  perMessageDeflate: {
+    threshold: 1024,
+    zlibDeflateOptions: {
+      chunkSize: 16 * 1024,
+    },
+    zlibInflateOptions: {
+      chunkSize: 16 * 1024,
+    },
+  }
+});
 
 // Initialize WebSocket Service
 const WebSocketService = require('./services/websocket.service');
 const webSocketService = new WebSocketService(io);
 webSocketService.initialize();
+
+// Middleware để xử lý CORS cho tất cả requests
+app.use((req, res, next) => {
+  // Cho phép tất cả origins
+  res.header('Access-Control-Allow-Origin', req.headers.origin || '*');
+  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS, PATCH');
+  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
+  res.header('Access-Control-Allow-Credentials', 'true');
+  res.header('Access-Control-Max-Age', '86400'); // 24 hours
+  
+  // Handle preflight requests
+  if (req.method === 'OPTIONS') {
+    return res.status(200).end();
+  }
+  
+  next();
+});
 
 try {
   // Swagger documentation
@@ -55,29 +105,8 @@ try {
 
 app.use(helmet({
   crossOriginEmbedderPolicy: false, // For file uploads
-  contentSecurityPolicy: {
-    directives: {
-      defaultSrc: ["'self'"],
-      styleSrc: ["'self'", "'unsafe-inline'"],
-      scriptSrc: ["'self'"],
-      imgSrc: ["'self'", "data:", "https:"],
-    },
-  },
-}));
-
-// Cấu hình CORS với các tùy chọn mở rộng
-app.use(cors({
-  origin: function(origin, callback) {
-    if (!origin || config.cors.origin.includes(origin) || config.cors.origin.includes('*')) {
-      callback(null, true);
-    } else {
-      callback(new Error('Not allowed by CORS'));
-    }
-  },
-  credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization'],
-  optionsSuccessStatus: 200
+  crossOriginResourcePolicy: false, // Allow cross-origin resources
+  contentSecurityPolicy: false, // Disable CSP for development flexibility
 }));
 
 app.use(express.json({ 
@@ -116,7 +145,12 @@ if (config.nodeEnv === 'development') {
 app.use(express.static(path.join(__dirname, 'public'), {
   maxAge: config.nodeEnv === 'production' ? '1d' : '0', // Cache in production
   etag: true,
-  lastModified: true
+  lastModified: true,
+  setHeaders: (res, path) => {
+    // Add CORS headers for static files
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+  }
 }));
 
 // Cấu hình phục vụ file tĩnh cho uploads
@@ -131,8 +165,9 @@ if (config.fileUpload && config.fileUpload.uploadDir) {
   // Thêm headers CORS cho static files
   app.use('/uploads', (req, res, next) => {
     res.header('Access-Control-Allow-Origin', '*');
-    res.header('Access-Control-Allow-Methods', 'GET');
+    res.header('Access-Control-Allow-Methods', 'GET, OPTIONS');
     res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+    res.header('Cross-Origin-Resource-Policy', 'cross-origin');
     next();
   }, express.static(uploadDir, {
     maxAge: config.nodeEnv === 'production' ? '7d' : '0',
@@ -141,6 +176,7 @@ if (config.fileUpload && config.fileUpload.uploadDir) {
     setHeaders: (res, path) => {
       // Thêm các header bổ sung nếu cần
       res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+      res.setHeader('Access-Control-Allow-Origin', '*');
     }
   }));
 }
@@ -214,6 +250,7 @@ app.get('/', (req, res) => {
 // CRITICAL: Error handling middleware MUST be last
 app.use(notFound);
 app.use(errorHandler);
+
 const startServer = async () => {
   try {
     logger.info('Starting Livestream Tool API...');
@@ -244,10 +281,12 @@ const startServer = async () => {
     }
 
     // 4. Start HTTP server
-    const server = httpServer.listen(config.port, () => {
-      logger.info(`✅ Server running in ${config.nodeEnv} mode on port ${config.port}`);
+    const server = httpServer.listen(config.port, config.host, () => {
+      logger.info(`✅ Server running in ${config.nodeEnv} mode on ${config.host}:${config.port}`);
       logger.info(`📖 API Documentation: http://localhost:${config.port}/api-docs`);
       logger.info(`🏥 Health Check: http://localhost:${config.port}/health`);
+      logger.info(`🌐 CORS: Allowing all origins`);
+      logger.info(`🔌 WebSocket: Allowing all origins`);
     });
 
     // ENHANCED: Graceful shutdown handling

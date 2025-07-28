@@ -68,30 +68,25 @@ const Logo = sequelize.define('Logo', {
   ],
 });
 
-// FIXED: Simplified and more reliable generateUniqueCode - Tạo mã ngắn hơn
+// Generate a 5-character code with L/B prefix followed by 4 digits
 Logo.generateUniqueCode = async function(type = 'logo', transaction = null) {
   const prefix = type === 'banner' ? 'B' : 'L';
   const maxAttempts = 50;
   
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
-    // Tạo 4-5 ký tự random để có tổng cộng 5-6 ký tự (bao gồm prefix)
-    const randomLength = Math.random() < 0.5 ? 4 : 5; // Random chọn 4 hoặc 5 ký tự
-    
+    // Generate 4 random digits (0-9)
     let randomPart = '';
-    for (let i = 0; i < randomLength; i++) {
-      // Sử dụng cả số và chữ cái để tăng độ đa dạng
-      const chars = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ';
-      randomPart += chars.charAt(Math.floor(Math.random() * chars.length));
+    for (let i = 0; i < 4; i++) {
+      randomPart += Math.floor(Math.random() * 10);
     }
     
-    const code = `${prefix}${randomPart}`;
+    const code = `${prefix}${randomPart}`; // Total 5 characters (1 letter + 4 digits)
     
     try {
-      // Kiểm tra code đã tồn tại chưa
+      // Check if code already exists
       const existingLogo = await this.findOne({
         where: { code_logo: code },
         transaction,
-        // Không dùng lock trong generateUniqueCode vì có thể gây deadlock
       });
       
       if (!existingLogo) {
@@ -99,7 +94,6 @@ Logo.generateUniqueCode = async function(type = 'logo', transaction = null) {
       }
     } catch (error) {
       console.log(`Attempt ${attempt + 1} failed for code generation:`, error.message);
-      // Tiếp tục thử với code khác
     }
   }
   

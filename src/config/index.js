@@ -20,27 +20,42 @@ const jwt = {
 // WebSocket Configuration
 const websocket = {
   path: process.env.WS_PATH || '/socket.io',
-  pingTimeout: parseInt(process.env.WS_PING_TIMEOUT || '5000', 10),
+  pingTimeout: parseInt(process.env.WS_PING_TIMEOUT || '60000', 10),
   pingInterval: parseInt(process.env.WS_PING_INTERVAL || '25000', 10),
   maxHttpBufferSize: parseInt(process.env.WS_MAX_HTTP_BUFFER_SIZE || '1e8', 10), // 100MB
   cors: {
-    origin: '*', // Chấp nhận từ mọi nguồn
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization'],
+    origin: true, // Cho phép tất cả origins
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin'],
     credentials: true
   },
   transports: ['websocket', 'polling'],
   allowUpgrades: true,
-  serveClient: false
+  serveClient: false,
+  cookie: false,
+  // Bật CORS cho WebSocket
+  allowEIO3: true,
+  // Cấu hình thêm cho WebSocket
+  perMessageDeflate: {
+    threshold: 1024, // Kích thước ngưỡng nén (bytes)
+    zlibDeflateOptions: {
+      chunkSize: 16 * 1024,
+    },
+    zlibInflateOptions: {
+      chunkSize: 16 * 1024,
+    },
+  }
 };
 
-// CORS Configuration
+// CORS Configuration - Cho phép tất cả origins
 const cors = {
-  origin: '*', // Cho phép tất cả các nguồn
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization'],
+  origin: true, // Cho phép tất cả origins
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin'],
   credentials: true,
-  optionsSuccessStatus: 200
+  optionsSuccessStatus: 200,
+  preflightContinue: false,
+  maxAge: 86400 // 24 hours
 };
 
 // File Upload Configuration
@@ -59,7 +74,11 @@ const fileUpload = {
 const rateLimit = {
   windowMs: 15 * 60 * 1000, // 15 minutes
   max: 100, // limit each IP to 100 requests per windowMs
-  message: 'Too many requests from this IP, please try again later.'
+  message: 'Too many requests from this IP, please try again later.',
+  skip: (req) => {
+    // Skip rate limiting for OPTIONS requests
+    return req.method === 'OPTIONS';
+  }
 };
 
 // Database Configuration
@@ -93,12 +112,14 @@ const redis = {
 module.exports = {
   // Environment
   env,
+  nodeEnv: env, // Add nodeEnv alias
   isProduction,
   isTest,
   
   // Server
   port: parseInt(process.env.PORT) || 5000,
-  appUrl: process.env.APP_URL || `http://localhost:${process.env.PORT || 5000}`,
+  host: process.env.HOST || '0.0.0.0',
+  appUrl: process.env.APP_URL || `http://${process.env.HOST || 'localhost'}:${process.env.PORT || 5000}`,
   frontendUrl: process.env.FRONTEND_URL || 'http://localhost:3000',
   
   // Database
@@ -116,6 +137,9 @@ module.exports = {
   // API Security
   cors,
   rateLimit,
+  
+  // WebSocket
+  websocket,
   
   // Logging
   logger,

@@ -497,3 +497,87 @@ exports.useAccessCode = async (req, res, next) => {
     next(error);
   }
 };
+
+/**
+ * @desc    Xác minh access code có hợp lệ không
+ * @route   GET /api/v1/access-codes/:code/verify-login
+ * @access  Public
+ */
+exports.verifyAccessCode = async (req, res, next) => {
+  try {
+    const { code } = req.params;
+    
+    if (!code) {
+      return next(new ApiError('Vui lòng cung cấp mã truy cập', StatusCodes.BAD_REQUEST));
+    }
+
+    // Tìm access code
+    const accessCode = await AccessCode.findOne({
+      where: { code },
+      include: [{
+        model: Match,
+        as: 'match',
+        attributes: ['id', 'teamAName', 'teamBName', 'teamALogo', 'teamBLogo', 'tournamentName', 'tournamentLogo', 'status', 'matchDate']
+      }]
+    });
+
+    if (!accessCode) {
+      return res.status(StatusCodes.NOT_FOUND).json({
+        success: false,
+        message: 'Mã truy cập không tồn tại',
+        isValid: false
+      });
+    }
+
+    // Kiểm tra trạng thái
+    if (accessCode.status !== 'active') {
+      return res.status(StatusCodes.BAD_REQUEST).json({
+        success: false,
+        message: `Mã truy cập đã bị ${accessCode.status === 'used' ? 'sử dụng' : accessCode.status === 'expired' ? 'hết hạn' : 'hủy'}`,
+        isValid: false,
+        status: accessCode.status
+      });
+    }
+
+    // Kiểm tra thời hạn
+    if (accessCode.expiresAt && new Date(accessCode.expiresAt) < new Date()) {
+      // Cập nhật trạng thái nếu đã hết hạn
+      await accessCode.update({ status: 'expired' });
+      
+      return res.status(StatusCodes.BAD_REQUEST).json({
+        success: false,
+        message: 'Mã truy cập đã hết hạn',
+        isValid: false,
+        status: 'expired'
+      });
+    }
+
+    // Kiểm tra số lần sử dụng
+    if (accessCode.maxUses > 0 && accessCode.usedCount >= accessCode.maxUses) {
+      await accessCode.update({ status: 'used' });
+      
+      return res.status(StatusCodes.BAD_REQUEST).json({
+        success: false,
+        message: 'Mã truy cập đã đạt giới hạn sử dụng',
+        isValid: false,
+        status: 'used'
+      });
+    }
+
+    // Nếu tất cả đều hợp lệ
+    res.status(StatusCodes.OK).json({
+      success: true,
+      message: 'Mã truy cập hợp lệ',
+      isValid: true,
+      data: {
+        code: accessCode.code,
+        status: accessCode.status,
+        expiresAt: accessCode.expiresAt,
+        match: accessCode.match
+      }
+    });
+
+  } catch (error) {
+    next(new ApiError(`Lỗi khi xác minh mã truy cập: ${error.message}`, StatusCodes.INTERNAL_SERVER_ERROR));
+  }
+};

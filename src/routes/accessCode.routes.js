@@ -49,7 +49,16 @@ const checkMatchOwnership = async (req, res, next) => {
   }
 };
 
-// Tất cả các route đều yêu cầu xác thực
+// Public route for verifying access code (no authentication required)
+/**
+ * @route   GET /api/v1/access-codes/:code/verify-login
+ * @desc    Xác minh access code có hợp lệ không
+ * @access  Public
+ * @param   {string} code - Mã truy cập cần xác minh
+ */
+router.get('/:code/verify-login', accessCodeController.verifyAccessCode);
+
+// Tất cả các route dưới đây đều yêu cầu xác thực
 router.use(protect);
 
 /**
