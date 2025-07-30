@@ -7,7 +7,7 @@ const { handleViewUpdates } = require('../socketHandlers/viewUpdates');
 const { handleMatchData } = require('../socketHandlers/matchData');
 const { handleDisplaySettings } = require('../socketHandlers/displaySettings');
 const { handleTimer, processTimerTick } = require('../socketHandlers/timerHandler');
-const { handleAudio, joinCommentaryRoom } = require('../socketHandlers/audioHandler');
+const { handleAudioUpdates, joinCommentaryRoom } = require('../socketHandlers/audioHandler');
 
 class WebSocketService {
   constructor(io) {
@@ -29,10 +29,7 @@ class WebSocketService {
       
       // Initialize all socket event handlers
       this.initializeSocketHandlers(socket);
-      
-      // Initialize audio handlers
-      handleAudio(socket, this);
-      
+            
       // Handle joining commentary room
       socket.on('join_commentary_room', (data) => {
         joinCommentaryRoom(socket, data);
@@ -81,6 +78,7 @@ class WebSocketService {
     handleMatchData(this.io, socket, this.rooms, this.userSessions);
     handleDisplaySettings(this.io, socket, this.rooms, this.userSessions);
     handleTimer(this.io, socket, this.rooms, this.userSessions);
+    handleAudioUpdates(this.io, socket, this.rooms, this.userSessions);
     
     // Add any additional global handlers here
     this.setupGlobalHandlers(socket);
