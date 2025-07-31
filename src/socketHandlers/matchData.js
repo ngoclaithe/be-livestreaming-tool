@@ -39,7 +39,7 @@ function handleMatchData(io, socket, rooms, userSessions) {
 
             // Log để kiểm tra cấu trúc dữ liệu hiện tại
             console.log('Current matchData structure:', JSON.stringify(room.currentState.matchData, null, 2));
-            
+
             // Update scores with new teamA/teamB structure
             if (scores.teamA !== undefined) {
                 room.currentState.matchData.homeTeam = room.currentState.matchData.homeTeam || {};
@@ -49,7 +49,7 @@ function handleMatchData(io, socket, rooms, userSessions) {
                 room.currentState.matchData.awayTeam = room.currentState.matchData.awayTeam || {};
                 room.currentState.matchData.awayTeam.score = parseInt(scores.teamB) || 0;
             }
-            
+
             // Log để kiểm tra sau khi cập nhật
             console.log('Updated scores:', {
                 teamA: room.currentState.matchData.homeTeam?.score,
@@ -219,7 +219,7 @@ function handleMatchData(io, socket, rooms, userSessions) {
 
             // Log current matchData status
             console.log(`[match_time_update] Current matchData.status for room ${accessCode}:`, room.currentState.matchData.status);
-            
+
             // Update room state
             if (time.matchTime !== undefined) {
                 console.log(`[match_time_update] Updating matchTime from ${room.currentState.matchData.matchTime} to ${time.matchTime}`);
@@ -332,6 +332,7 @@ function handleMatchData(io, socket, rooms, userSessions) {
 
     // Penalty updates
     socket.on('penalty_update', (data) => {
+        console.log("Giá trị penalty_update là:", data);
         try {
             const { accessCode, penaltyData, timestamp = Date.now() } = data;
 
@@ -390,7 +391,7 @@ function handleMatchData(io, socket, rooms, userSessions) {
                 timestamp: timestamp
             });
 
-            logger.info(`Penalty data updated for room ${accessCode}`);
+            logger.info(`Penalty data updated for room ${accessCode}`, penaltyData);
 
         } catch (error) {
             logger.error('Error in penalty_update:', error);
@@ -435,6 +436,60 @@ function handleMatchData(io, socket, rooms, userSessions) {
             logger.error('Error in marquee_update:', error);
             socket.emit('marquee_error', {
                 error: 'Lỗi khi cập nhật chữ chạy',
+                details: error.message
+            });
+        }
+    });
+
+    // Lineup updates
+    socket.on('lineup_update', (data) => {
+        try {
+            const { accessCode, lineup, timestamp = Date.now() } = data;
+
+            if (!accessCode || !lineup) {
+                throw new Error('Access code and lineup data are required');
+            }
+
+            const room = rooms.get(accessCode);
+            if (!room) {
+                throw new Error('Room not found');
+            }
+
+            // Initialize lineupData if it doesn't exist
+            if (!room.currentState.lineupData) {
+                room.currentState.lineupData = {};
+            }
+
+            // Update team lineups
+            if (lineup.teamA && Array.isArray(lineup.teamA)) {
+                room.currentState.lineupData.teamA = lineup.teamA.map(player => ({
+                    number: player.number || '',
+                    name: player.name || ''
+                }));
+            }
+
+            if (lineup.teamB && Array.isArray(lineup.teamB)) {
+                room.currentState.lineupData.teamB = lineup.teamB.map(player => ({
+                    number: player.number || '',
+                    name: player.name || ''
+                }));
+            }
+
+            room.lastActivity = timestamp;
+
+            // Broadcast to all clients in the room
+            console.log("giá trị broadcast là:", room.currentState.lineupData);
+            io.to(`room_${accessCode}`).emit('lineup_updated', {
+                lineupData: room.currentState.lineupData,
+                timestamp: timestamp
+            });
+
+            logger.info(`Lineup data updated for room ${accessCode}`);
+
+        } catch (error) {
+            logger.error('Error in lineup_update:', error);
+            socket.emit('lineup_error', {
+                error: 'Lỗi khi cập nhật đội hình',
                 details: error.message
             });
         }

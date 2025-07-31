@@ -64,11 +64,19 @@ exports.createAccessCode = async (req, res, next) => {
       status: 'active',
       createdBy: req.user.id,
       matchId: matchId || match.id, // Sử dụng matchId từ request hoặc match vừa tạo
-      expiresAt: expiresAt ? new Date(expiresAt) : null,
       maxUses,
       usageCount: 0,
       metadata
     }, { transaction });
+
+    // Đặt thời hạn cho access code (mặc định 30 ngày nếu không chỉ định)
+    if (expiresAt) {
+      accessCode.expiresAt = new Date(expiresAt);
+      await accessCode.save({ transaction });
+    } else {
+      // Gọi phương thức setExpiry với thời hạn mặc định 30 ngày
+      await accessCode.setExpiry(30);
+    }
 
     // Commit transaction nếu mọi thứ thành công
     await transaction.commit();

@@ -6,6 +6,7 @@ const logger = require('../utils/logger');
 function handleViewUpdates(io, socket, rooms, userSessions) {
   // Main view update event - changes the current view
   socket.on('view_update', (data) => {
+    console.log("Giá trị nhận được là:", data);
     try {
       if (!data || typeof data !== 'object') {
         throw new Error('Invalid data format');
