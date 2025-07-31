@@ -300,6 +300,7 @@ function handleDisplaySettings(io, socket, rooms, userSessions) {
 
   // General match info update (tournament, stadium, etc.)
   socket.on('match_info_update', (data) => {
+    console.log("Giá trị match_info_update là:", data);
     try {
       const { accessCode, matchInfo, timestamp = Date.now() } = data;
       

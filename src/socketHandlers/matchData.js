@@ -139,6 +139,7 @@ function handleMatchData(io, socket, rooms, userSessions) {
 
     // Team logos update
     socket.on('team_logos_update', (data) => {
+        console.log("Giá trị Team logos update", data);
         try {
             const { accessCode, logos, timestamp = Date.now() } = data;
 
