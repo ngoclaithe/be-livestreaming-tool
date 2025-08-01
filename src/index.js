@@ -210,13 +210,14 @@ app.get('/health', (req, res) => {
 });
 
 // ENHANCED: Route imports with error handling
-let authRoutes, userRoutes, logoRoutes, accessCodeRoutes;
+let authRoutes, userRoutes, logoRoutes, accessCodeRoutes, displaySettingRoutes;
 
 try {
   authRoutes = require('./routes/auth.routes');
   userRoutes = require('./routes/user.routes');
   logoRoutes = require('./routes/logo.routes');
   accessCodeRoutes = require('./routes/accessCode.routes');
+  displaySettingRoutes = require('./routes/displaySettingRoutes');
 } catch (error) {
   logger.error('Error importing routes:', error);
   process.exit(1);
@@ -233,6 +234,7 @@ app.use('/api/v1/auth', authRoutes);
 app.use('/api/v1/users', userRoutes);
 app.use('/api/v1/logos', logoRoutes);
 app.use('/api/v1/access-codes', accessCodeRoutes);
+app.use('/api/v1/display-settings', displaySettingRoutes);
 
 // ENHANCED: Base route with more information
 app.get('/', (req, res) => {

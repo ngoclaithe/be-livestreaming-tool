@@ -3,6 +3,7 @@ const User = require('./User');
 const Logo = require('./Logo');
 const Match = require('./Match');
 const AccessCode = require('./AccessCode');
+const DisplaySetting = require('./DisplaySetting');
 
 // Thiết lập quan hệ giữa các model
 function setupAssociations() {
@@ -71,7 +72,7 @@ function setupAssociations() {
       as: 'revoker' 
     });
 
-    // Match has many AccessCodes
+        // Match has many AccessCodes
     Match.hasMany(AccessCode, { 
       foreignKey: 'matchId', 
       as: 'accessCodes',
@@ -82,6 +83,21 @@ function setupAssociations() {
     AccessCode.belongsTo(Match, { 
       foreignKey: 'matchId', 
       as: 'match' 
+    });
+
+    // AccessCode has many DisplaySettings
+    AccessCode.hasMany(DisplaySetting, {
+      foreignKey: 'accessCode',
+      sourceKey: 'code',
+      as: 'displaySettings',
+      onDelete: 'CASCADE',
+      onUpdate: 'CASCADE'
+    });
+    
+    DisplaySetting.belongsTo(AccessCode, {
+      foreignKey: 'accessCode',
+      targetKey: 'code',
+      as: 'accessCodeData'
     });
 
     console.log('✅ Model associations set up successfully');
@@ -124,6 +140,9 @@ async function initModels() {
     
     await AccessCode.sync(syncOptions);
     console.log('✅ AccessCode model synced');
+    
+    await DisplaySetting.sync(syncOptions);
+    console.log('✅ DisplaySetting model synced');
 
     console.log('✅ All database models synchronized successfully');
     return true;
@@ -157,6 +176,7 @@ module.exports = {
   Logo,
   Match,
   AccessCode,
+  DisplaySetting,
   initModels,
   setupAssociations,
 };
