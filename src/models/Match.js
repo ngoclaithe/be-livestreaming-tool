@@ -47,7 +47,7 @@ const Match = sequelize.define('Match', {
     comment: 'Match start time',
   },
   typeMatch: {
-    type: DataTypes.ENUM('soccer', 'pickleball', 'other'),
+    type: DataTypes.ENUM('soccer', 'pickleball', 'other', 'futsal'),
     defaultValue: 'soccer',
     allowNull: false,
     comment: 'Match type',

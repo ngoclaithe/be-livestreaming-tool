@@ -5,12 +5,10 @@ const { protect, authorize } = require('../middleware/auth.middleware');
 const Match = require('../models/Match');
 const AccessCode = require('../models/AccessCode');
 
-// Middleware để kiểm tra quyền sở hữu match thông qua access code
 const checkMatchOwnership = async (req, res, next) => {
   try {
     const { code } = req.params;
     
-    // Tìm access code và match liên quan
     const accessCode = await AccessCode.findOne({
       where: { code },
       include: [{

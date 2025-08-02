@@ -61,7 +61,6 @@ const DisplaySetting = sequelize.define('DisplaySetting', {
   ],
 });
 
-// Add association to AccessCode model
 DisplaySetting.associate = function(models) {
   DisplaySetting.belongsTo(models.AccessCode, {
     foreignKey: 'accessCode',

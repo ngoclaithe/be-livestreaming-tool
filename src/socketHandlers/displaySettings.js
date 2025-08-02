@@ -1,7 +1,6 @@
 const logger = require('../utils/logger');
 const { DisplaySetting } = require('../models');
 
-// Helper function to update or create display settings
 async function updateDisplaySettings(accessCode, type, items) {
   try {
     const displaySettings = [];
@@ -19,7 +18,6 @@ async function updateDisplaySettings(accessCode, type, items) {
 
     for (let i = 0; i < maxLength; i++) {
       if (codeLogos[i] && urlLogos[i] && positions[i]) {
-        // Kiểm tra xem bản ghi đã tồn tại chưa
         const existingRecord = await DisplaySetting.findOne({
           where: {
             accessCode,
@@ -28,7 +26,6 @@ async function updateDisplaySettings(accessCode, type, items) {
           }
         });
 
-        // Nếu chưa tồn tại thì thêm vào mảng để tạo mới
         if (!existingRecord) {
           displaySettings.push({
             type: type,
@@ -44,7 +41,6 @@ async function updateDisplaySettings(accessCode, type, items) {
 
     if (displaySettings.length > 0) {
       await DisplaySetting.bulkCreate(displaySettings);
-      // console.log(`✅ Đã thêm mới ${displaySettings.length} bản ghi cho ${type}`);
     } else {
       console.log('ℹ️ Không có bản ghi mới nào được thêm vào');
     }
@@ -57,10 +53,7 @@ async function updateDisplaySettings(accessCode, type, items) {
 }
 
 function handleDisplaySettings(io, socket, rooms, userSessions) {
-  // Display settings update
-  socket.on('display_settings_update', (data) => {
-    // console.log('📨 Received display_settings_update:', data);
-    
+  socket.on('display_settings_update', (data) => {    
     try {
       const { accessCode, displaySettings, timestamp = Date.now() } = data;     
       if (!accessCode || !displaySettings) {
@@ -80,7 +73,6 @@ function handleDisplaySettings(io, socket, rooms, userSessions) {
         throw new Error('Unauthorized: Only admin can update display settings');
       }
       
-      // Initialize display settings if not exists
       if (!room.currentState.displaySettings) {
         room.currentState.displaySettings = {
           logoShape: 'square',  // Default value
@@ -98,12 +90,10 @@ function handleDisplaySettings(io, socket, rooms, userSessions) {
       
       room.lastActivity = timestamp;
       
-      // Broadcast the updated display settings to all clients in the room
       io.to(`room_${accessCode}`).emit('display_settings_updated', {
         displaySettings: room.currentState.displaySettings,
         timestamp: timestamp
       });
-      // console.log("Giá trị trả về display_settings_updated:", room.currentState.displaySettings);
       
     } catch (error) {
       console.error('❌ Error in display_settings_update:', error.message);
@@ -121,7 +111,6 @@ function handleDisplaySettings(io, socket, rooms, userSessions) {
         throw new Error('Access code and sponsors data are required');
       }
       
-      // Lấy behavior từ sponsors nếu có, nếu không thì mặc định là 'add'
       const behavior = sponsors.behavior || 'add';
       
       const room = rooms.get(accessCode);
@@ -146,7 +135,6 @@ function handleDisplaySettings(io, socket, rooms, userSessions) {
         };
       }
       
-      // Cập nhật từng trường nếu được cung cấp
       const fields = ['code_logo', 'url_logo', 'position', 'type_display'];
       fields.forEach(field => {
         if (sponsors[field] !== undefined) {
@@ -157,7 +145,6 @@ function handleDisplaySettings(io, socket, rooms, userSessions) {
       });
       
       room.lastActivity = timestamp;
-      // console.log('behavior', behavior);
       // Xử lý dựa trên behavior
       if (behavior === 'remove') {
         // Xóa khỏi database
@@ -221,7 +208,7 @@ function handleDisplaySettings(io, socket, rooms, userSessions) {
 
   // Organizing update
   socket.on('organizing_update', async (data) => {
-    // console.log('📨 Received organizing_update:', data);
+    console.log('📨 Received organizing_update:', data);
     
     try {
       const { accessCode, organizing, timestamp = Date.now() } = data;     
@@ -317,7 +304,7 @@ function handleDisplaySettings(io, socket, rooms, userSessions) {
       
       console.log('✅ Đã cập nhật và gửi lại dữ liệu organizing');
       console.log("Giá trị trả về organizing_updated:", room.currentState.organizing);
-      
+      console.log("Giá trị behavior:", behavior);
     } catch (error) {
       console.error('❌ Lỗi trong organizing_update:', error.message);
       socket.emit('error', {
@@ -332,7 +319,8 @@ function handleDisplaySettings(io, socket, rooms, userSessions) {
     console.log('📨 Received media_partners_update:', data);
     
     try {
-      const { accessCode, media_partners, timestamp = Date.now() } = data;     
+      // Chấp nhận cả media_partners và mediaPartners
+      const { accessCode, media_partners = data.mediaPartners, timestamp = Date.now() } = data;     
       if (!accessCode || !media_partners) {
         throw new Error('Access code and media_partners data are required');
       }
@@ -416,9 +404,9 @@ function handleDisplaySettings(io, socket, rooms, userSessions) {
         }
       }
       
-      // Phát lại cho tất cả client trong phòng
+      // Phát lại cho tất cả client trong phòng, sử dụng mediaPartner thay vì media_partners
       io.to(`room_${accessCode}`).emit('media_partners_updated', {
-        media_partners: room.currentState.media_partners,
+        mediaPartners: room.currentState.media_partners,
         behavior: behavior,
         timestamp: timestamp
       });

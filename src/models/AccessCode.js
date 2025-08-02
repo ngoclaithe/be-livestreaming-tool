@@ -108,12 +108,30 @@ const AccessCode = sequelize.define('AccessCode', {
   ],
 });
 
-// Generate a 6-character base36 access code (digits + uppercase letters)
-AccessCode.generateCode = function() {
-  // Generate a random number between 0 and 36^6 (2,176,782,336)
-  const randomNum = Math.floor(Math.random() * Math.pow(36, 6));
-  // Convert to base36 string and pad with leading zeros if needed
-  return randomNum.toString(36).toUpperCase().padStart(6, '0');
+// Generate access code based on match type
+AccessCode.generateCode = function(typeMatch = 'soccer') {
+  // Define prefix based on match type
+  let prefix = 'B'; // Default prefix for soccer
+  
+  switch(typeMatch.toLowerCase()) {
+    case 'pickleball':
+      prefix = 'P';
+      break;
+    case 'futsal':
+      prefix = 'F';
+      break;
+    // Add more cases if needed
+  }
+  
+  // Generate 5 random alphanumeric characters (uppercase letters and digits)
+  const characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+  let randomPart = '';
+  
+  for (let i = 0; i < 5; i++) {
+    randomPart += characters.charAt(Math.floor(Math.random() * characters.length));
+  }
+  
+  return prefix + randomPart;
 };
 
 // Check if access code is expired

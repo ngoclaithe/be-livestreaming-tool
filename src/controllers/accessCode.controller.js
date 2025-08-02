@@ -15,73 +15,56 @@ exports.createAccessCode = async (req, res, next) => {
   const transaction = await sequelize.transaction();
   
   try {
-    const { 
-      matchId, 
-      expiresAt, 
-      maxUses = 1, 
-      metadata = {},
-      typeMatch = 'soccer',
-      teamAName = 'Team A',
-      teamBName = 'Team B',
-      teamALogo = '/images/default-team-logo.png',
-      teamBLogo = '/images/default-team-logo.png',
-      tournamentName = '',
-      tournamentLogo = ''
-    } = req.body;
-
-    let match;
+    console.log('Request body:', req.body);
+    const { typeMatch, maxUses = 1, metadata = {}, expiresAt } = req.body;
     
-    // Nếu không có matchId, tạo mới một match
-    if (!matchId) {
-      match = await Match.create({
-        teamAName,
-        teamBName,
-        teamALogo,
-        teamBLogo,
-        tournamentName,
-        tournamentLogo,
-        typeMatch,
-        createdBy: req.user.id, // Thêm createdBy
-        matchDate: new Date(), // Ngày hiện tại làm mặc định
-        status: 'upcoming',
-        // Các trường thống kê để trống
-        homeScore: 0,
-        awayScore: 0,
-        possession: { home: 50, away: 50 },
-        shots: { home: 0, away: 0 },
-        shotsOnTarget: { home: 0, away: 0 },
-        corners: { home: 0, away: 0 },
-        fouls: { home: 0, away: 0 },
-        offsides: { home: 0, away: 0 },
-        yellowCards: { home: 0, away: 0 },
-        redCards: { home: 0, away: 0 }
-      }, { transaction });
+    if (!typeMatch) {
+      throw new ApiError(StatusCodes.BAD_REQUEST, 'typeMatch is required');
     }
 
-    // Tạo mới access code
-    const accessCode = await AccessCode.create({
-      code: AccessCode.generateCode(),
-      status: 'active',
+    // Tạo mới match với các giá trị mặc định
+    const match = await Match.create({
+      teamAName: 'Team A',
+      teamBName: 'Team B',
+      teamALogo: '/images/default-team-logo.png',
+      teamBLogo: '/images/default-team-logo.png',
+      tournamentName: '',
+      tournamentLogo: '',
+      typeMatch,
       createdBy: req.user.id,
-      matchId: matchId || match.id, // Sử dụng matchId từ request hoặc match vừa tạo
-      maxUses,
-      usageCount: 0,
-      metadata
+      matchDate: new Date(),
+      status: 'upcoming',
+      homeScore: 0,
+      awayScore: 0,
+      possession: { home: 50, away: 50 },
+      shots: { home: 0, away: 0 },
+      shotsOnTarget: { home: 0, away: 0 },
+      corners: { home: 0, away: 0 },
+      fouls: { home: 0, away: 0 },
+      offsides: { home: 0, away: 0 },
+      yellowCards: { home: 0, away: 0 },
+      redCards: { home: 0, away: 0 }
     }, { transaction });
 
-    // Đặt thời hạn cho access code (mặc định 30 ngày nếu không chỉ định)
-    if (expiresAt) {
-      accessCode.expiresAt = new Date(expiresAt);
-      await accessCode.save({ transaction });
-    } else {
-      // Gọi phương thức setExpiry với thời hạn mặc định 30 ngày
-      await accessCode.setExpiry(30);
+    // Tạo mới access code với expiresAt
+    const accessCode = await AccessCode.create({
+      code: AccessCode.generateCode(typeMatch),
+      status: 'active',
+      createdBy: req.user.id,
+      matchId: match.id,
+      maxUses: parseInt(maxUses, 10) || 1,
+      usageCount: 0,
+      metadata: metadata || {},
+      expiresAt: expiresAt ? new Date(expiresAt) : null
+    }, { transaction });
+
+    // Nếu không có expiresAt, đặt mặc định 30 ngày
+    if (!expiresAt) {
+      await accessCode.setExpiry(30, transaction);
     }
 
-    // Commit transaction nếu mọi thứ thành công
     await transaction.commit();
 
-    // Nếu có tạo mới match, thêm thông tin match vào response
     const response = {
       success: true,
       data: accessCode.toJSON()
@@ -93,7 +76,6 @@ exports.createAccessCode = async (req, res, next) => {
 
     res.status(StatusCodes.CREATED).json(response);
   } catch (error) {
-    // Rollback transaction nếu có lỗi
     await transaction.rollback();
     logger.error(`Create access code error: ${error.message}`);
     next(error);
@@ -138,7 +120,6 @@ exports.updateMatchInfo = async (req, res, next) => {
       throw new ApiError(StatusCodes.NOT_FOUND, 'Không tìm thấy thông tin trận đấu');
     }
 
-    // Cập nhật thông tin trận đấu
     const updateData = {};
     if (teamAName) updateData.teamAName = teamAName;
     if (teamBName) updateData.teamBName = teamBName;
@@ -156,7 +137,7 @@ exports.updateMatchInfo = async (req, res, next) => {
       success: true,
       data: {
         ...accessCode.match.toJSON(),
-        matchName: accessCode.match.matchName // Đảm bảo trả về matchName đã được tính toán
+        matchName: accessCode.match.matchName 
       }
     });
   } catch (error) {
@@ -227,25 +208,20 @@ exports.getAccessCodes = async (req, res, next) => {
 
     const where = {};
     
-    // Filter by status - only add if status is valid
     if (status && status !== 'undefined' && status !== 'null' && status !== '') {
       where.status = status;
     } else if (status === '') {
-      // If status is empty string, don't filter by status
       delete where.status;
     }
     
-    // Filter by matchId
     if (matchId) {
       where.matchId = matchId;
     }
     
-    // Filter by creator
     if (createdBy) {
       where.createdBy = createdBy;
     }
     
-    // For non-admin users, only show their own codes or codes related to their matches
     if (req.user.role !== 'admin') {
       try {
         const userMatches = await Match.findAll({
