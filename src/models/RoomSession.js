@@ -1,6 +1,7 @@
 const { DataTypes } = require('sequelize');
 const { sequelize } = require('../config/database');
 
+// Định nghĩa model
 const RoomSession = sequelize.define('RoomSession', {
     id: {
         type: DataTypes.INTEGER,
@@ -44,7 +45,7 @@ const RoomSession = sequelize.define('RoomSession', {
         allowNull: true
     },
     status: {
-        type: DataTypes.ENUM('active', 'inactive', 'expired'),
+        type: DataTypes.ENUM('active', 'inactive', 'expired', 'pause'),
         defaultValue: 'inactive',
         allowNull: false
     }
@@ -56,6 +57,7 @@ const RoomSession = sequelize.define('RoomSession', {
 
 // Thiết lập quan hệ với AccessCode
 RoomSession.associate = function(models) {
+    // Sử dụng string thay vì model để tránh vòng lặp phụ thuộc
     RoomSession.belongsTo(models.AccessCode, {
         foreignKey: 'accessCode',
         targetKey: 'code',
@@ -63,4 +65,16 @@ RoomSession.associate = function(models) {
         onDelete: 'CASCADE',
         onUpdate: 'CASCADE'
     });
+
+    // Thêm quan hệ ngược lại từ AccessCode
+    models.AccessCode.hasOne(RoomSession, {
+        foreignKey: 'accessCode',
+        sourceKey: 'code',
+        as: 'roomSession',
+        onDelete: 'CASCADE',
+        onUpdate: 'CASCADE'
+    });
 };
+
+// Export model
+module.exports = RoomSession;

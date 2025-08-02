@@ -6,7 +6,6 @@ const AccessCode = require('./AccessCode');
 const DisplaySetting = require('./DisplaySetting');
 const RoomSession = require('./RoomSession');
 
-// Thiết lập quan hệ giữa các model
 function setupAssociations() {
   try {
     // User has many Logos
@@ -30,14 +29,6 @@ function setupAssociations() {
       onUpdate: 'CASCADE'
     });
 
-    // Quan hệ 1-1 giữa AccessCode và RoomSession
-    AccessCode.hasOne(RoomSession, {
-      foreignKey: 'accessCode',
-      sourceKey: 'code',
-      as: 'roomSession',
-      onDelete: 'CASCADE',
-      onUpdate: 'CASCADE'
-    });
     
     Match.belongsTo(User, { 
       foreignKey: 'createdBy', 
@@ -130,15 +121,12 @@ async function initModels() {
 
     console.log('🔄 Synchronizing database...');
     
-    // Sync với options an toàn hơn
     const syncOptions = {
-      // Chỉ alter trong development, không bao giờ force trong production
       alter: process.env.NODE_ENV === 'development',
-      force: false, // KHÔNG BAO GIỜ force trong production
+      force: false, 
       logging: process.env.NODE_ENV === 'development' ? console.log : false
     };
 
-    // Sync theo thứ tự để tránh foreign key conflicts
     await User.sync(syncOptions);
     console.log('✅ User model synced');
     
@@ -153,6 +141,9 @@ async function initModels() {
     
     await DisplaySetting.sync(syncOptions);
     console.log('✅ DisplaySetting model synced');
+    
+    await RoomSession.sync(syncOptions);
+    console.log('✅ RoomSession model synced');
 
     console.log('✅ All database models synchronized successfully');
     return true;
@@ -160,12 +151,10 @@ async function initModels() {
   } catch (error) {
     console.error('❌ Error initializing models:', error.message);
     
-    // Nếu lỗi liên quan đến syntax USING, thử giải pháp khác
     if (error.message.includes('USING') || error.message.includes('syntax error')) {
       console.log('🔄 Attempting to fix foreign key constraint issues...');
       
       try {
-        // Chỉ trong development, thử authenticate thay vì sync lại
         if (process.env.NODE_ENV === 'development') {
           await sequelize.authenticate();
           console.log('✅ Database connection verified, skipping problematic sync');
@@ -187,6 +176,7 @@ module.exports = {
   Match,
   AccessCode,
   DisplaySetting,
+  RoomSession,
   initModels,
   setupAssociations,
 };

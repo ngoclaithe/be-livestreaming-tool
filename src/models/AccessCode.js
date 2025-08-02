@@ -169,10 +169,9 @@ AccessCode.prototype.revoke = async function(userId) {
   return this.save();
 };
 
-// Set expiry date
 AccessCode.prototype.setExpiry = async function(days) {
   const expiryDate = new Date();
-  expiryDate.setDate(expiryDate.getDate() + (days || 30)); // Default to 30 days
+  expiryDate.setDate(expiryDate.getDate() + (days || 30)); 
   this.expiresAt = expiryDate;
   return this.save();
 };

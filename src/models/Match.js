@@ -12,7 +12,7 @@ const Match = sequelize.define('Match', {
     allowNull: false,
     defaultValue: 'Team A',
     comment: 'Team A name',
-  },
+  },  
   teamBName: {
     type: DataTypes.STRING(100),
     allowNull: false,
