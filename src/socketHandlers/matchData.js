@@ -1,4 +1,44 @@
 const logger = require('../utils/logger');
+const { Match } = require('../models');
+
+const { AccessCode } = require('../models');
+
+/**
+ * Cập nhật thông tin trận đấu vào cơ sở dữ liệu
+ * @param {string} accessCode - Mã truy cập phòng
+ * @param {object} updateData - Dữ liệu cần cập nhật
+ * @returns {Promise<boolean>} - Trả về true nếu cập nhật thành công, ngược lại trả về false
+ */
+async function updateMatchInDatabase(accessCode, updateData) {
+    try {
+        // Tìm access code để lấy matchId
+        const accessCodeRecord = await AccessCode.findOne({
+            where: { code: accessCode },
+            attributes: ['matchId']
+        });
+
+        if (!accessCodeRecord || !accessCodeRecord.matchId) {
+            logger.error(`No match found for access code: ${accessCode}`);
+            return false;
+        }
+
+        // Cập nhật thông tin trận đấu
+        const [updated] = await Match.update(updateData, {
+            where: { id: accessCodeRecord.matchId }
+        });
+
+        if (updated === 0) {
+            logger.error(`Match not found with ID: ${accessCodeRecord.matchId}`);
+            return false;
+        }
+
+        logger.info(`Match ${accessCodeRecord.matchId} updated in database via access code ${accessCode}`);
+        return true;
+    } catch (error) {
+        logger.error(`Error updating match in database: ${error.message}`, { error });
+        return false;
+    }
+}
 
 /**
  * Handles all match-related socket events
@@ -41,13 +81,22 @@ function handleMatchData(io, socket, rooms, userSessions) {
             console.log('Current matchData structure:', JSON.stringify(room.currentState.matchData, null, 2));
 
             // Update scores with new teamA/teamB structure
+            const updateData = {};
+            
             if (scores.teamA !== undefined) {
                 room.currentState.matchData.homeTeam = room.currentState.matchData.homeTeam || {};
                 room.currentState.matchData.homeTeam.score = parseInt(scores.teamA) || 0;
+                updateData.homeScore = room.currentState.matchData.homeTeam.score;
             }
             if (scores.teamB !== undefined) {
                 room.currentState.matchData.awayTeam = room.currentState.matchData.awayTeam || {};
                 room.currentState.matchData.awayTeam.score = parseInt(scores.teamB) || 0;
+                updateData.awayScore = room.currentState.matchData.awayTeam.score;
+            }
+            
+            // Update scores and team info in database
+            if (Object.keys(updateData).length > 0) {
+                updateMatchInDatabase(accessCode, updateData);
             }
 
             // Log để kiểm tra sau khi cập nhật
@@ -60,11 +109,16 @@ function handleMatchData(io, socket, rooms, userSessions) {
             // Broadcast to all clients in the room
             io.to(`room_${accessCode}`).emit('score_updated', {
                 scores: {
-                    home: room.currentState.matchData.homeTeam.score,
-                    away: room.currentState.matchData.awayTeam.score
+                    home: room.currentState.matchData.homeTeam?.score || 0,
+                    away: room.currentState.matchData.awayTeam?.score || 0
                 },
                 timestamp: timestamp
             });
+            
+            // Update scores in database if matchId exists
+            if (Object.keys(updateData).length > 0 && room.matchId) {
+                updateMatchInDatabase(room.matchId, updateData);
+            }
 
             logger.info(`Scores updated for room ${accessCode}: ${scores.teamA}-${scores.teamB}`);
 
@@ -108,12 +162,23 @@ function handleMatchData(io, socket, rooms, userSessions) {
                 });
             }
 
-            // Update team names with new structure
+            // Update team names with new structure and prepare for database update
+            const updateData = {};
+            
             if (names.teamA) {
+                room.currentState.matchData.homeTeam = room.currentState.matchData.homeTeam || {};
                 room.currentState.matchData.homeTeam.name = String(names.teamA);
+                updateData.teamAName = String(names.teamA);
             }
             if (names.teamB) {
+                room.currentState.matchData.awayTeam = room.currentState.matchData.awayTeam || {};
                 room.currentState.matchData.awayTeam.name = String(names.teamB);
+                updateData.teamBName = String(names.teamB);
+            }
+            
+            // Update team names in database
+            if (Object.keys(updateData).length > 0) {
+                updateMatchInDatabase(accessCode, updateData);
             }
             room.lastActivity = timestamp;
 
@@ -173,13 +238,25 @@ function handleMatchData(io, socket, rooms, userSessions) {
                 });
             }
 
-            // Update team logos with new teamA/teamB structure
+            // Update team logos with new teamA/teamB structure and prepare for database update
+            const updateData = {};
+            
             if (logos.teamA) {
+                room.currentState.matchData.homeTeam = room.currentState.matchData.homeTeam || {};
                 room.currentState.matchData.homeTeam.logo = String(logos.teamA);
+                updateData.teamALogo = String(logos.teamA);
             }
             if (logos.teamB) {
+                room.currentState.matchData.awayTeam = room.currentState.matchData.awayTeam || {};
                 room.currentState.matchData.awayTeam.logo = String(logos.teamB);
+                updateData.teamBLogo = String(logos.teamB);
             }
+            
+            // Update team logos in database
+            if (Object.keys(updateData).length > 0) {
+                updateMatchInDatabase(accessCode, updateData);
+            }
+            
             room.lastActivity = timestamp;
 
             // Broadcast to all clients in the room

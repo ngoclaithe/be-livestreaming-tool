@@ -4,6 +4,7 @@ const Logo = require('./Logo');
 const Match = require('./Match');
 const AccessCode = require('./AccessCode');
 const DisplaySetting = require('./DisplaySetting');
+const RoomSession = require('./RoomSession');
 
 // Thiết lập quan hệ giữa các model
 function setupAssociations() {
@@ -26,6 +27,15 @@ function setupAssociations() {
       foreignKey: 'createdBy', 
       as: 'matches',
       onDelete: 'SET NULL',
+      onUpdate: 'CASCADE'
+    });
+
+    // Quan hệ 1-1 giữa AccessCode và RoomSession
+    AccessCode.hasOne(RoomSession, {
+      foreignKey: 'accessCode',
+      sourceKey: 'code',
+      as: 'roomSession',
+      onDelete: 'CASCADE',
       onUpdate: 'CASCADE'
     });
     

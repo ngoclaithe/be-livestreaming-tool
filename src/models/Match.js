@@ -121,12 +121,46 @@ const Match = sequelize.define('Match', {
     allowNull: true,
     comment: 'Main referee name',
   },
+  location: {
+    type: DataTypes.STRING(100),
+    allowNull: true,
+    comment: 'Địa điểm tổ chức trận đấu',
+  },
+  match_title: {
+    type: DataTypes.STRING(255),
+    allowNull: true,
+    comment: 'Tên giải/trận đấu',
+  },
+  teamAkitcolor: {
+    type: DataTypes.STRING(10),
+    allowNull: true,
+    comment: 'Màu áo đội A',
+  },
+  teamBkitcolor: {
+    type: DataTypes.STRING(10),
+    allowNull: true,
+    comment: 'Màu áo đội B',
+  },
+  teamA2kitcolor: {
+    type: DataTypes.STRING(10),
+    allowNull: true,
+    comment: 'Màu quần đội A',
+  },
+  teamB2kitcolor: {
+    type: DataTypes.STRING(10),
+    allowNull: true,
+    comment: 'Màu quần đội B',
+  },
+  live_unit: {
+    type: DataTypes.STRING(10),
+    allowNull: true,
+    comment: 'Đơn vị live',
+  },
   attendance: {
     type: DataTypes.INTEGER,
     allowNull: true,
     comment: 'Number of attendees',
   },
-  // Additional metadata
   metadata: {
     type: DataTypes.JSON,
     allowNull: true,
