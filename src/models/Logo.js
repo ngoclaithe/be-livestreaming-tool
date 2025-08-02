@@ -119,7 +119,7 @@ Logo.prototype.getPublicUrl = function() {
   
   // Otherwise, construct the full URL
   const config = require('../config');
-  const baseUrl = config.app?.url || `http://localhost:${config.port || 5000}`;
+  const baseUrl = config.app?.url || `http://${config.host}:${config.port || 5000}`;
   return `${baseUrl}${this.url_logo.startsWith('/') ? '' : '/'}${this.url_logo}`;
 };
 

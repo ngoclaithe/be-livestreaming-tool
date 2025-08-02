@@ -257,8 +257,8 @@ const startServer = async () => {
 
     const server = httpServer.listen(config.port, config.host, () => {
       logger.info(`✅ Server running in ${config.nodeEnv} mode on ${config.host}:${config.port}`);
-      logger.info(`📖 API Documentation: http://localhost:${config.port}/api-docs`);
-      logger.info(`🏥 Health Check: http://localhost:${config.port}/health`);
+      logger.info(`📖 API Documentation: http://${config.host}:${config.port}/api-docs`);
+      logger.info(`🏥 Health Check: http://${config.host}:${config.port}/health`);
       logger.info(`🌐 CORS: Allowing all origins`);
       logger.info(`🔌 WebSocket: Allowing all origins`);
     });
