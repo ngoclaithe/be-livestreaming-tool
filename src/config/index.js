@@ -60,14 +60,10 @@ const cors = {
 
 // File Upload Configuration
 const fileUpload = {
-  // Maximum file size (5MB)
   maxFileSize: 5 * 1024 * 1024,
-  // Allowed file types
   allowedFileTypes: ['image/jpeg', 'image/png', 'image/gif'],
-  // Upload directory (relative to project root)
   uploadDir: process.env.UPLOAD_DIR || 'uploads',
-  // Base URL for serving uploaded files
-  baseUrl: process.env.BASE_URL || 'http://localhost:5000',
+  baseUrl: process.env.APP_URL || `http://${process.env.HOST || 'localhost'}:${process.env.PORT || 5000}`,
 };
 
 // Rate Limit Configuration
