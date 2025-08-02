@@ -78,17 +78,16 @@ const uploadSingle = (fieldName) => (req, res, next) => {
       return next(err);
     }
     
-    // If file was uploaded, add the file path to the request
     if (req.file) {
-      // Create a relative path for the file URL
       const relativePath = path.relative(process.cwd(), req.file.path);
-      req.file.fileUrl = `${config.fileUpload.baseUrl}/${relativePath.replace(/\\/g, '/')}`;
+      const relativeUrl = `/${relativePath.replace(/\\/g, '/')}`;
+      req.file.fileUrl = relativeUrl;
       
       logger.info(`✅ [Upload Success] File uploaded successfully`, { 
         ip: clientIp,
         file: req.file.filename,
         size: req.file.size,
-        url: req.file.fileUrl
+        url: relativeUrl
       });
     }
     

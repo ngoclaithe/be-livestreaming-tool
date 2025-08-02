@@ -149,7 +149,7 @@ if (config.fileUpload && config.fileUpload.uploadDir) {
     fs.mkdirSync(uploadDir, { recursive: true });
   }
   
-  app.use('/uploads', (req, res, next) => {
+  app.use('/api/v1/uploads', (req, res, next) => {
     res.header('Access-Control-Allow-Origin', '*');
     res.header('Access-Control-Allow-Methods', 'GET, OPTIONS');
     res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
