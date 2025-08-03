@@ -139,7 +139,7 @@ exports.getPaymentRequests = async (req, res, next) => {
       include: [
         {
           model: User,
-          as: 'user',
+          as: 'owner',
           attributes: ['id', 'name', 'email']
         },
         {
@@ -187,7 +187,7 @@ exports.getPaymentRequestByCode = async (req, res, next) => {
       include: [
         {
           model: User,
-          as: 'user',
+          as: 'owner',
           attributes: ['id', 'name', 'email']
         }
       ]
@@ -214,7 +214,7 @@ exports.getPaymentRequest = async (req, res, next) => {
       include: [
         {
           model: User,
-          as: 'user',
+          as: 'owner',
           attributes: ['id', 'name', 'email']
         },
         {
