@@ -1,282 +1,401 @@
-const { PaymentAccessCode, User, AccessCode } = require('../models');
-const { generateRandomCode } = require('../utils/helpers');
+const PaymentAccessCode = require('../models/PaymentAccessCode');
+const User = require('../models/User');
+const AccessCode = require('../models/AccessCode');
+const ApiError = require('../utils/ApiError');
+const { StatusCodes } = require('http-status-codes');
+const logger = require('../utils/logger');
+const { sequelize } = require('../config/database');
 const { Op } = require('sequelize');
 
-// Tạo yêu cầu kích hoạt code thanh toán mới
-exports.createPaymentRequest = async (req, res) => {
-  try {
-    const { accessCode, bankAccountNumber, bankName, amount, transactionNote } = req.body;
-    const userId = req.user.id;
+exports.createPaymentRequest = async (req, res, next) => {
+  const t = await sequelize.transaction();
+  let responded = false;
 
-    // Kiểm tra access code có tồn tại và chưa được sử dụng
-    const codeExists = await AccessCode.findOne({
-      where: { 
-        code: accessCode,
-        status: 'active'
+  try {
+    console.log('🔥 [PaymentAccessCode Controller] Create payment request started');
+    
+    const { accessCode, bankAccountNumber, bankName, amount, transactionNote } = req.body;
+    
+    if (!accessCode || !bankAccountNumber || !bankName || !amount) {
+      await t.rollback();
+      responded = true;
+      return next(new ApiError('Vui lòng cung cấp đầy đủ thông tin bắt buộc', StatusCodes.BAD_REQUEST));
+    }
+
+    const existingAccessCode = await AccessCode.findOne({
+      where: { code: accessCode }
+    });
+
+    if (!existingAccessCode) {
+      await t.rollback();
+      responded = true;
+      return next(new ApiError('Mã truy cập không tồn tại', StatusCodes.NOT_FOUND));
+    }
+
+    const existingRequest = await PaymentAccessCode.findOne({
+      where: {
+        accessCode: accessCode,
+        status: 'pending'
       }
     });
 
-    if (!codeExists) {
-      return res.status(400).json({ 
-        success: false,
-        message: 'Mã truy cập không hợp lệ hoặc đã được sử dụng' 
+    if (existingRequest) {
+      await t.rollback();
+      responded = true;
+      
+      // Trả về thông tin yêu cầu thanh toán đã tồn tại
+      return res.status(StatusCodes.OK).json({
+        success: true,
+        message: 'Yêu cầu thanh toán cho mã này đã tồn tại',
+        data: {
+          id: existingRequest.id,
+          code_pay: existingRequest.code_pay,
+          accessCode: existingRequest.accessCode,
+          bankAccountNumber: existingRequest.bankAccountNumber,
+          bankName: existingRequest.bankName,
+          amount: existingRequest.amount,
+          status: existingRequest.status,
+          created_at: existingRequest.createdAt
+        }
       });
     }
 
-    // Tạo yêu cầu thanh toán mới
+    const code_pay = PaymentAccessCode.generatePaymentCode();
+
     const paymentRequest = await PaymentAccessCode.create({
+      userId: req.user.id,
       accessCode,
-      code_pay: generateRandomCode(6, true),
+      code_pay,
       bankAccountNumber,
       bankName,
-      amount,
-      transactionNote,
-      userId,
-      status: 'pending'
-    });
+      amount: parseFloat(amount),
+      transactionNote
+    }, { transaction: t });
 
-    res.status(201).json({
+    await t.commit();
+    responded = true;
+
+    return res.status(StatusCodes.CREATED).json({
       success: true,
-      data: paymentRequest,
-      message: 'Tạo yêu cầu thanh toán thành công'
+      data: {
+        id: paymentRequest.id,
+        code_pay: paymentRequest.code_pay,
+        accessCode: paymentRequest.accessCode,
+        bankAccountNumber: paymentRequest.bankAccountNumber,
+        bankName: paymentRequest.bankName,
+        amount: paymentRequest.amount,
+        status: paymentRequest.status,
+        created_at: paymentRequest.createdAt
+      }
     });
   } catch (error) {
-    console.error('Lỗi khi tạo yêu cầu thanh toán:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Đã xảy ra lỗi khi tạo yêu cầu thanh toán',
-      error: error.message
+    if (!t.finished) {
+      try {
+        await t.rollback();
+      } catch (rollbackError) {
+        logger.error(`Transaction rollback error: ${rollbackError.message}`);
+      }
+    } else {
+      logger.warn('⚠️ Transaction already committed, skip rollback');
+    }
+
+    logger.error(`Create payment request error: ${error.message}`, {
+      stack: error.stack,
+      user_id: req.user?.id,
+      access_code: req.body?.accessCode
     });
+
+    if (!responded && !res.headersSent) {
+      return next(error);
+    }
   }
 };
 
-// Lấy danh sách yêu cầu thanh toán (cho admin)
-exports.getAllPaymentRequests = async (req, res) => {
+exports.getPaymentRequests = async (req, res, next) => {
   try {
-    const { status, page = 1, limit = 10 } = req.query;
-    const offset = (page - 1) * limit;
-
-    const whereClause = {};
+    const { status, userId, accessCode, page = 1, limit = 10 } = req.query;
+    const filter = {};
+    
+    if (req.user.role !== 'admin') {
+      filter.userId = req.user.id;
+    } else if (userId) {
+      filter.userId = userId;
+    }
+    
     if (status) {
-      whereClause.status = status;
+      filter.status = status;
     }
 
-    const { count, rows } = await PaymentAccessCode.findAndCountAll({
-      where: whereClause,
+    if (accessCode) {
+      filter.accessCode = {
+        [Op.iLike]: `%${accessCode}%`
+      };
+    }
+
+    const offset = (page - 1) * limit;
+
+    const { count, rows: paymentRequests } = await PaymentAccessCode.findAndCountAll({
+      where: filter,
       include: [
-        { model: User, as: 'user', attributes: ['id', 'username', 'email'] },
-        { model: User, as: 'approver', attributes: ['id', 'username'] },
-        { model: User, as: 'canceller', attributes: ['id', 'username'] }
+        {
+          model: User,
+          as: 'user',
+          attributes: ['id', 'name', 'email']
+        },
+        {
+          model: User,
+          as: 'approver',
+          attributes: ['id', 'name', 'email'],
+          required: false
+        },
+        {
+          model: User,
+          as: 'canceller',
+          attributes: ['id', 'name', 'email'],
+          required: false
+        }
       ],
       order: [['createdAt', 'DESC']],
       limit: parseInt(limit),
-      offset: parseInt(offset),
-      distinct: true
+      offset: offset
     });
 
-    res.json({
+    return res.status(StatusCodes.OK).json({
       success: true,
-      data: rows,
-      pagination: {
-        total: count,
-        page: parseInt(page),
-        totalPages: Math.ceil(count / limit)
-      }
+      count: paymentRequests.length,
+      total: count,
+      page: parseInt(page),
+      pages: Math.ceil(count / limit),
+      data: paymentRequests
     });
   } catch (error) {
-    console.error('Lỗi khi lấy danh sách yêu cầu thanh toán:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Đã xảy ra lỗi khi lấy danh sách yêu cầu thanh toán',
-      error: error.message
-    });
+    logger.error(`Get payment requests error: ${error.message}`);
+    return next(error);
   }
 };
 
-// Lấy chi tiết yêu cầu thanh toán
-exports.getPaymentRequestById = async (req, res) => {
+exports.getPaymentRequestByCode = async (req, res, next) => {
   try {
-    const { id } = req.params;
+    const { code_pay } = req.params;
+    
+    if (!code_pay) {
+      return next(new ApiError('Vui lòng cung cấp mã thanh toán', StatusCodes.BAD_REQUEST));
+    }
 
-    const paymentRequest = await PaymentAccessCode.findByPk(id, {
+    const paymentRequest = await PaymentAccessCode.findOne({
+      where: { code_pay: code_pay.toUpperCase() },
       include: [
-        { model: User, as: 'user', attributes: ['id', 'username', 'email'] },
-        { model: User, as: 'approver', attributes: ['id', 'username'] },
-        { model: User, as: 'canceller', attributes: ['id', 'username'] },
-        { 
-          model: AccessCode, 
-          as: 'accessCodeInfo',
-          attributes: ['id', 'code', 'status', 'expiresAt']
+        {
+          model: User,
+          as: 'user',
+          attributes: ['id', 'name', 'email']
+        }
+      ]
+    });
+    
+    if (!paymentRequest) {
+      logger.warn(`Payment request not found with code: ${code_pay}`);
+      return next(new ApiError('Không tìm thấy yêu cầu thanh toán với mã đã cung cấp', StatusCodes.NOT_FOUND));
+    }
+
+    return res.status(StatusCodes.OK).json({
+      success: true,
+      data: paymentRequest
+    });
+  } catch (error) {
+    logger.error(`Get payment request by code error: ${error.message}`, { error });
+    return next(error);
+  }
+};
+
+exports.getPaymentRequest = async (req, res, next) => {
+  try {
+    const paymentRequest = await PaymentAccessCode.findByPk(req.params.id, {
+      include: [
+        {
+          model: User,
+          as: 'user',
+          attributes: ['id', 'name', 'email']
+        },
+        {
+          model: User,
+          as: 'approver',
+          attributes: ['id', 'name', 'email'],
+          required: false
+        },
+        {
+          model: User,
+          as: 'canceller',
+          attributes: ['id', 'name', 'email'],
+          required: false
         }
       ]
     });
 
     if (!paymentRequest) {
-      return res.status(404).json({
-        success: false,
-        message: 'Không tìm thấy yêu cầu thanh toán'
-      });
+      return next(new ApiError('Không tìm thấy yêu cầu thanh toán', StatusCodes.NOT_FOUND));
     }
 
-    // Chỉ cho phép admin hoặc chính người tạo xem
     if (req.user.role !== 'admin' && paymentRequest.userId !== req.user.id) {
-      return res.status(403).json({
-        success: false,
-        message: 'Bạn không có quyền xem yêu cầu này'
-      });
+      return next(new ApiError('Không có quyền truy cập yêu cầu này', StatusCodes.FORBIDDEN));
     }
 
-    res.json({
+    return res.status(StatusCodes.OK).json({
       success: true,
       data: paymentRequest
     });
   } catch (error) {
-    console.error('Lỗi khi lấy chi tiết yêu cầu thanh toán:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Đã xảy ra lỗi khi lấy chi tiết yêu cầu thanh toán',
-      error: error.message
-    });
+    logger.error(`Get payment request error: ${error.message}`);
+    return next(error);
   }
 };
 
-// Admin duyệt yêu cầu thanh toán
-exports.approvePaymentRequest = async (req, res) => {
+exports.approvePaymentRequest = async (req, res, next) => {
+  const t = await sequelize.transaction();
+  
   try {
     const { id } = req.params;
-    const adminId = req.user.id;
 
-    const paymentRequest = await PaymentAccessCode.findByPk(id, {
-      include: [
-        { model: AccessCode, as: 'accessCodeInfo' },
-        { model: User, as: 'user' }
-      ]
-    });
+    if (req.user.role !== 'admin') {
+      await t.rollback();
+      return next(new ApiError('Chỉ admin mới có quyền duyệt yêu cầu', StatusCodes.FORBIDDEN));
+    }
+
+    const paymentRequest = await PaymentAccessCode.findByPk(id, { transaction: t });
 
     if (!paymentRequest) {
-      return res.status(404).json({
-        success: false,
-        message: 'Không tìm thấy yêu cầu thanh toán'
-      });
+      await t.rollback();
+      return next(new ApiError('Không tìm thấy yêu cầu thanh toán', StatusCodes.NOT_FOUND));
     }
 
-    if (paymentRequest.status !== 'pending') {
-      return res.status(400).json({
-        success: false,
-        message: 'Yêu cầu này đã được xử lý trước đó'
-      });
-    }
+    await paymentRequest.approve(req.user.id);
+    await t.commit();
 
-    // Thực hiện duyệt yêu cầu
-    await paymentRequest.approve(adminId);
-
-    // Cập nhật trạng thái access code
-    if (paymentRequest.accessCodeInfo) {
-      await paymentRequest.accessCodeInfo.update({ status: 'active' });
-    }
-
-    res.json({
+    return res.status(StatusCodes.OK).json({
       success: true,
-      message: 'Đã duyệt yêu cầu thanh toán thành công',
+      message: 'Yêu cầu thanh toán đã được duyệt thành công',
       data: paymentRequest
     });
   } catch (error) {
-    console.error('Lỗi khi duyệt yêu cầu thanh toán:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Đã xảy ra lỗi khi duyệt yêu cầu thanh toán',
-      error: error.message
-    });
+    await t.rollback();
+    logger.error(`Approve payment request error: ${error.message}`);
+    
+    if (error.message.includes('Chỉ có thể duyệt')) {
+      return next(new ApiError(error.message, StatusCodes.BAD_REQUEST));
+    }
+    
+    return next(error);
   }
 };
 
-// Hủy yêu cầu thanh toán
-exports.cancelPaymentRequest = async (req, res) => {
+exports.cancelPaymentRequest = async (req, res, next) => {
+  const t = await sequelize.transaction();
+  
   try {
     const { id } = req.params;
-    const userId = req.user.id;
     const { reason } = req.body;
 
-    const paymentRequest = await PaymentAccessCode.findByPk(id);
+    const paymentRequest = await PaymentAccessCode.findByPk(id, { transaction: t });
 
     if (!paymentRequest) {
-      return res.status(404).json({
-        success: false,
-        message: 'Không tìm thấy yêu cầu thanh toán'
-      });
+      await t.rollback();
+      return next(new ApiError('Không tìm thấy yêu cầu thanh toán', StatusCodes.NOT_FOUND));
     }
 
-    // Chỉ cho phép admin hoặc chính người tạo hủy
-    if (req.user.role !== 'admin' && paymentRequest.userId !== userId) {
-      return res.status(403).json({
-        success: false,
-        message: 'Bạn không có quyền hủy yêu cầu này'
-      });
+    if (req.user.role !== 'admin' && paymentRequest.userId !== req.user.id) {
+      await t.rollback();
+      return next(new ApiError('Không có quyền hủy yêu cầu này', StatusCodes.FORBIDDEN));
     }
 
-    if (paymentRequest.status !== 'pending') {
-      return res.status(400).json({
-        success: false,
-        message: 'Không thể hủy yêu cầu đã được xử lý'
-      });
+    if (!reason) {
+      await t.rollback();
+      return next(new ApiError('Vui lòng cung cấp lý do hủy', StatusCodes.BAD_REQUEST));
     }
 
-    // Thực hiện hủy yêu cầu
-    const cancelledBy = req.user.role === 'admin' ? userId : null;
-    await paymentRequest.cancel(cancelledBy, reason || 'Yêu cầu đã bị hủy');
+    await paymentRequest.cancel(req.user.id, reason);
+    await t.commit();
 
-    res.json({
+    return res.status(StatusCodes.OK).json({
       success: true,
-      message: 'Đã hủy yêu cầu thanh toán thành công'
+      message: 'Yêu cầu thanh toán đã được hủy',
+      data: paymentRequest
     });
   } catch (error) {
-    console.error('Lỗi khi hủy yêu cầu thanh toán:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Đã xảy ra lỗi khi hủy yêu cầu thanh toán',
-      error: error.message
-    });
+    await t.rollback();
+    logger.error(`Cancel payment request error: ${error.message}`);
+    
+    if (error.message.includes('Chỉ có thể hủy')) {
+      return next(new ApiError(error.message, StatusCodes.BAD_REQUEST));
+    }
+    
+    return next(error);
   }
 };
 
-// Lấy lịch sử yêu cầu thanh toán của người dùng
-exports.getUserPaymentHistory = async (req, res) => {
+exports.deletePaymentRequest = async (req, res, next) => {
+  const t = await sequelize.transaction();
+  
   try {
-    const userId = req.user.id;
-    const { page = 1, limit = 10 } = req.query;
-    const offset = (page - 1) * limit;
+    const { id } = req.params;
 
-    const { count, rows } = await PaymentAccessCode.findAndCountAll({
-      where: { userId },
-      order: [['createdAt', 'DESC']],
-      limit: parseInt(limit),
-      offset: parseInt(offset),
-      include: [
-        { model: User, as: 'approver', attributes: ['id', 'username'] },
-        { model: User, as: 'canceller', attributes: ['id', 'username'] },
-        { 
-          model: AccessCode, 
-          as: 'accessCodeInfo',
-          attributes: ['id', 'code', 'status']
-        }
-      ]
+    if (req.user.role !== 'admin') {
+      await t.rollback();
+      return next(new ApiError('Chỉ admin mới có quyền xóa yêu cầu', StatusCodes.FORBIDDEN));
+    }
+
+    const paymentRequest = await PaymentAccessCode.findByPk(id, { transaction: t });
+
+    if (!paymentRequest) {
+      await t.rollback();
+      return next(new ApiError('Không tìm thấy yêu cầu thanh toán', StatusCodes.NOT_FOUND));
+    }
+
+    await paymentRequest.destroy({ transaction: t });
+    await t.commit();
+
+    return res.status(StatusCodes.OK).json({
+      success: true,
+      message: 'Yêu cầu thanh toán đã được xóa',
+      data: {}
+    });
+  } catch (error) {
+    await t.rollback();
+    logger.error(`Delete payment request error: ${error.message}`);
+    return next(error);
+  }
+};
+
+exports.getPaymentStats = async (req, res, next) => {
+  try {
+    if (req.user.role !== 'admin') {
+      return next(new ApiError('Chỉ admin mới có quyền xem thống kê', StatusCodes.FORBIDDEN));
+    }
+
+    const stats = await PaymentAccessCode.findAll({
+      attributes: [
+        'status',
+        [sequelize.fn('COUNT', sequelize.col('id')), 'count'],
+        [sequelize.fn('SUM', sequelize.col('amount')), 'total_amount']
+      ],
+      group: ['status'],
+      raw: true
     });
 
-    res.json({
+    const totalRequests = await PaymentAccessCode.count();
+    const totalAmount = await PaymentAccessCode.sum('amount');
+
+    return res.status(StatusCodes.OK).json({
       success: true,
-      data: rows,
-      pagination: {
-        total: count,
-        page: parseInt(page),
-        totalPages: Math.ceil(count / limit)
+      data: {
+        total_requests: totalRequests,
+        total_amount: totalAmount || 0,
+        by_status: stats
       }
     });
   } catch (error) {
-    console.error('Lỗi khi lấy lịch sử thanh toán:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Đã xảy ra lỗi khi lấy lịch sử thanh toán',
-      error: error.message
-    });
+    logger.error(`Get payment stats error: ${error.message}`);
+    return next(error);
   }
 };
+
+console.log('PaymentAccessCode Controller exports:', Object.keys(module.exports));

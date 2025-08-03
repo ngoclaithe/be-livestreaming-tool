@@ -5,6 +5,7 @@ const ApiError = require('../utils/ApiError');
 const { StatusCodes } = require('http-status-codes');
 const logger = require('../utils/logger');
 const { sequelize } = require('../config/database');
+const { startOfDay, endOfDay } = require('date-fns');
 
 /**
  * @desc    Tạo mới access code và match (nếu chưa có matchId)
@@ -46,10 +47,33 @@ exports.createAccessCode = async (req, res, next) => {
       redCards: { home: 0, away: 0 }
     }, { transaction });
 
-    // Tạo mới access code với expiresAt
+    // Tìm tất cả access code active của user trong ngày hiện tại
+    const today = new Date();
+    const startOfToday = startOfDay(today);
+    const endOfToday = endOfDay(today);
+    
+    const activeAccessCodesToday = await AccessCode.count({
+      where: {
+        createdBy: req.user.id,
+        status: 'active',
+        createdAt: {
+          [Op.between]: [startOfToday, endOfToday]
+        }
+      }
+    });
+
+    // Kiểm tra giới hạn (tối đa 3 access code active trong 1 ngày)
+    const MAX_ACTIVE_CODES_PER_DAY = 3;
+    let newAccessCodeStatus = 'active';
+    
+    if (activeAccessCodesToday >= MAX_ACTIVE_CODES_PER_DAY) {
+      newAccessCodeStatus = 'inactive';
+    }
+
+    // Tạo mới access code với status được xác định
     const accessCode = await AccessCode.create({
       code: AccessCode.generateCode(typeMatch),
-      status: 'active',
+      status: newAccessCodeStatus,
       createdBy: req.user.id,
       matchId: match.id,
       maxUses: parseInt(maxUses, 10) || 1,
@@ -67,12 +91,22 @@ exports.createAccessCode = async (req, res, next) => {
 
     const response = {
       success: true,
-      data: accessCode.toJSON()
+      data: accessCode.toJSON(),
+      message: newAccessCodeStatus === 'inactive' 
+        ? `Access code đã được tạo nhưng ở trạng thái inactive vì bạn đã có ${MAX_ACTIVE_CODES_PER_DAY} access code active trong ngày hôm nay`
+        : 'Access code đã được tạo thành công'
     };
 
     if (match) {
       response.match = match.toJSON();
     }
+
+    // Thêm thông tin về giới hạn vào response
+    response.dailyLimit = {
+      maxActiveCodesPerDay: MAX_ACTIVE_CODES_PER_DAY,
+      currentActiveCount: newAccessCodeStatus === 'active' ? activeAccessCodesToday + 1 : activeAccessCodesToday,
+      remainingSlots: newAccessCodeStatus === 'active' ? MAX_ACTIVE_CODES_PER_DAY - activeAccessCodesToday - 1 : MAX_ACTIVE_CODES_PER_DAY - activeAccessCodesToday
+    };
 
     res.status(StatusCodes.CREATED).json(response);
   } catch (error) {

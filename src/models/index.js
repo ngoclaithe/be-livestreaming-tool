@@ -123,6 +123,7 @@ function setupAssociations() {
     // User has many PaymentAccessCodes
     User.hasMany(PaymentAccessCode, {
       foreignKey: 'userId',
+      sourceKey: 'id',
       as: 'paymentAccessCodes',
       onDelete: 'SET NULL',
       onUpdate: 'CASCADE'
@@ -131,16 +132,19 @@ function setupAssociations() {
     // PaymentAccessCode belongs to User (multiple relationships)
     PaymentAccessCode.belongsTo(User, {
       foreignKey: 'userId',
+      targetKey: 'id',
       as: 'user'
     });
 
     PaymentAccessCode.belongsTo(User, {
       foreignKey: 'approvedBy',
+      targetKey: 'id',
       as: 'approver'
     });
 
     PaymentAccessCode.belongsTo(User, {
       foreignKey: 'cancelledBy',
+      targetKey: 'id',
       as: 'canceller'
     });
 

@@ -10,6 +10,7 @@ const PaymentAccessCode = sequelize.define('PaymentAccessCode', {
   },
   userId: {
     type: DataTypes.INTEGER,
+    field: 'user_id',
     allowNull: false,
     references: {
       model: 'Users',
