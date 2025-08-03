@@ -5,6 +5,7 @@ const Match = require('./Match');
 const AccessCode = require('./AccessCode');
 const DisplaySetting = require('./DisplaySetting');
 const RoomSession = require('./RoomSession');
+const PaymentAccessCode = require('./PaymentAccessCode');
 
 function setupAssociations() {
   try {
@@ -119,6 +120,30 @@ function setupAssociations() {
       onUpdate: 'CASCADE'
     });
 
+    // User has many PaymentAccessCodes
+    User.hasMany(PaymentAccessCode, {
+      foreignKey: 'userId',
+      as: 'paymentAccessCodes',
+      onDelete: 'SET NULL',
+      onUpdate: 'CASCADE'
+    });
+
+    // PaymentAccessCode belongs to User (multiple relationships)
+    PaymentAccessCode.belongsTo(User, {
+      foreignKey: 'userId',
+      as: 'user'
+    });
+
+    PaymentAccessCode.belongsTo(User, {
+      foreignKey: 'approvedBy',
+      as: 'approver'
+    });
+
+    PaymentAccessCode.belongsTo(User, {
+      foreignKey: 'cancelledBy',
+      as: 'canceller'
+    });
+
     console.log('✅ Model associations set up successfully');
     return true;
   } catch (error) {
@@ -162,6 +187,9 @@ async function initModels() {
     
     await RoomSession.sync(syncOptions);
     console.log('✅ RoomSession model synced');
+    
+    await PaymentAccessCode.sync(syncOptions);
+    console.log('✅ PaymentAccessCode model synced');
 
     console.log('✅ All database models synchronized successfully');
     return true;
@@ -195,6 +223,7 @@ module.exports = {
   AccessCode,
   DisplaySetting,
   RoomSession,
+  PaymentAccessCode,
   initModels,
   setupAssociations,
 };

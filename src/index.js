@@ -200,6 +200,7 @@ try {
   accessCodeRoutes = require('./routes/accessCode.routes');
   displaySettingRoutes = require('./routes/displaySettingRoutes');
   roomSessionRoutes = require('./routes/roomSessionRoutes');
+  paymentAccessCodeRoutes = require('./routes/paymentAccessCode.routes');
 } catch (error) {
   logger.error('Error importing routes:', error);
   process.exit(1);
@@ -216,6 +217,7 @@ app.use('/api/v1/logos', logoRoutes);
 app.use('/api/v1/access-codes', accessCodeRoutes);
 app.use('/api/v1/display-settings', displaySettingRoutes);
 app.use('/api/v1/room-sessions', roomSessionRoutes);
+app.use('/api/v1/payment-access-codes', paymentAccessCodeRoutes);
 
 app.get('/', (req, res) => {
   res.status(200).json({

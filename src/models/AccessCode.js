@@ -13,7 +13,7 @@ const AccessCode = sequelize.define('AccessCode', {
     unique: true,
   },
   status: {
-    type: DataTypes.ENUM('active', 'used', 'expired', 'revoked'),
+    type: DataTypes.ENUM('active', 'used', 'expired', 'revoked', 'inactive'),
     defaultValue: 'active',
     allowNull: false,
   },
