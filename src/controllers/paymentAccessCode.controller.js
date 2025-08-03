@@ -13,7 +13,6 @@ exports.createPaymentRequest = async (req, res, next) => {
   let responded = false;
 
   try {
-    // console.log('🔥 [PaymentAccessCode Controller] Create payment request started', req.body);
     
     const { accessCode, amount, transactionNote } = req.body;
     
@@ -86,9 +85,9 @@ exports.createPaymentRequest = async (req, res, next) => {
       code_pay: code_pay,
       bank_account_number: paymentInfo.accountNumber || '',
       bank_name: paymentInfo.bank || 'Ngân hàng chưa xác định',
-      account_holder_name: paymentInfo.name || 'Chủ tài khoản chưa xác định',
+      name: paymentInfo.name || 'Chủ tài khoản chưa xác định',
       amount: parseFloat(amount) || 0,
-      transaction_note: transactionNote || ''
+      transaction_note: transactionNote || '',
     }, { transaction: t });
 
     await t.commit();
