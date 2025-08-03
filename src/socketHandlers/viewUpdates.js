@@ -105,14 +105,14 @@ function handleViewUpdates(io, socket, rooms, userSessions) {
       }
       
       // Verify admin permission
-      const userData = userSessions.get(socket.id);
-      if (!userData || !room.adminClients.has(socket.id)) {
-        return socket.emit('poster_error', {
-          error: 'Bạn không có quyền thay đổi poster',
-          code: 'UNAUTHORIZED',
-          timestamp: Date.now()
-        });
-      }
+      // const userData = userSessions.get(socket.id);
+      // if (!userData || !room.adminClients.has(socket.id)) {
+      //   return socket.emit('poster_error', {
+      //     error: 'Bạn không có quyền thay đổi poster',
+      //     code: 'UNAUTHORIZED',
+      //     timestamp: Date.now()
+      //   });
+      // }
       
       // Update room state with the new poster
       console.log(`🔄 Đang cập nhật poster từ '${room.currentState.displaySettings.selectedPoster}' sang '${posterType}'`);

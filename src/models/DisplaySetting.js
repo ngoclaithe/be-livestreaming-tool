@@ -8,9 +8,9 @@ const DisplaySetting = sequelize.define('DisplaySetting', {
     autoIncrement: true,
   },
   type: {
-    type: DataTypes.ENUM('sponsors', 'organizing', 'media_partners', 'other'),
+    type: DataTypes.ENUM('sponsors', 'organizing', 'media_partners', 'tournament_logo'),
     allowNull: false,
-    comment: 'Loại hiển thị: sponsors, organizing, media_partners, other',
+    comment: 'Loại hiển thị: sponsors, organizing, media_partners, tournament_logo',
   },
   code_logo: {
     type: DataTypes.STRING(255),

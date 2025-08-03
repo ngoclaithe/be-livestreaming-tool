@@ -11,32 +11,65 @@ const { AccessCode } = require('../models');
  */
 async function updateMatchInDatabase(accessCode, updateData) {
     try {
-        // Tìm access code để lấy matchId
+        // Find access code to get matchId
         const accessCodeRecord = await AccessCode.findOne({
             where: { code: accessCode },
-            attributes: ['matchId']
+            attributes: ['matchId'],
+            include: [{
+                model: Match,
+                as: 'match',
+                required: false
+            }]
         });
 
-        if (!accessCodeRecord || !accessCodeRecord.matchId) {
-            logger.error(`No match found for access code: ${accessCode}`);
-            return false;
+        if (!accessCodeRecord) {
+            logger.error(`Access code not found: ${accessCode}`);
+            return { success: false, error: 'Mã truy cập không hợp lệ' };
         }
 
-        // Cập nhật thông tin trận đấu
+        if (!accessCodeRecord.matchId) {
+            logger.error(`No match associated with access code: ${accessCode}`);
+            return { success: false, error: 'Mã truy cập chưa được liên kết với trận đấu nào' };
+        }
+
+        // Check if match exists
+        if (!accessCodeRecord.match) {
+            logger.error(`Match not found with ID: ${accessCodeRecord.matchId} referenced by access code: ${accessCode}`);
+            return { 
+                success: false, 
+                error: 'Thông tin trận đấu không tồn tại',
+                details: `Match ID ${accessCodeRecord.matchId} not found`
+            };
+        }
+
+        // Update match information
         const [updated] = await Match.update(updateData, {
             where: { id: accessCodeRecord.matchId }
         });
 
         if (updated === 0) {
-            logger.error(`Match not found with ID: ${accessCodeRecord.matchId}`);
-            return false;
+            logger.error(`Failed to update match with ID: ${accessCodeRecord.matchId}`);
+            return { 
+                success: false, 
+                error: 'Không thể cập nhật thông tin trận đấu',
+                details: 'No rows were updated'
+            };
         }
 
         logger.info(`Match ${accessCodeRecord.matchId} updated in database via access code ${accessCode}`);
-        return true;
+        return { success: true };
     } catch (error) {
-        logger.error(`Error updating match in database: ${error.message}`, { error });
-        return false;
+        logger.error(`Error updating match in database: ${error.message}`, { 
+            error: error.message,
+            stack: error.stack,
+            accessCode,
+            updateData
+        });
+        return { 
+            success: false, 
+            error: 'Lỗi khi cập nhật cơ sở dữ liệu',
+            details: error.message
+        };
     }
 }
 
@@ -44,6 +77,73 @@ async function updateMatchInDatabase(accessCode, updateData) {
  * Handles all match-related socket events
  */
 function handleMatchData(io, socket, rooms, userSessions) {
+    // Match title update handler
+    socket.on('match_title_update', async (data) => {
+        console.log('Giá trị match_title_update là:', data);
+        try {
+            const { accessCode, matchTitle, timestamp = Date.now() } = data;
+
+            // Validate input
+            if (!accessCode) {
+                throw new Error('Mã truy cập không hợp lệ');
+            }
+
+            // Get room and validate
+            const room = rooms.get(accessCode);
+            if (!room) {
+                logger.error(`Room not found for access code: ${accessCode}`, { socketId: socket.id });
+                return socket.emit('match_update_error', {
+                    error: 'Không tìm thấy phòng. Vui lòng thử lại sau khi tham gia phòng.',
+                    code: 'ROOM_NOT_FOUND',
+                    timestamp: Date.now()
+                });
+            }
+
+            // Verify admin permission
+            const userData = userSessions.get(socket.id);
+            if (!userData || !room.adminClients.has(socket.id)) {
+                return socket.emit('match_update_error', {
+                    error: 'Bạn không có quyền cập nhật thông tin trận đấu',
+                    code: 'UNAUTHORIZED',
+                    timestamp: Date.now()
+                });
+            }
+
+            // Prepare update data
+            const updateData = {};
+            
+            // Process title if provided
+            if (matchTitle !== undefined) {
+                room.currentState.matchData.matchTitle = matchTitle;
+                updateData.match_title = matchTitle;
+            }
+
+            // Update in database if there are changes
+            if (Object.keys(updateData).length > 0) {
+                const result = await updateMatchInDatabase(accessCode, updateData);
+                if (!result.success) {
+                    throw new Error(result.error || 'Không thể cập nhật thông tin trận đấu');
+                }
+                
+                io.to(`room_${accessCode}`).emit('match_title_updated', {
+                    matchTitle: room.currentState.matchData.matchTitle,
+                    timestamp: timestamp
+                });
+                
+                logger.info(`Match title updated for room ${accessCode}`, { 
+                    matchTitle: matchTitle
+                });
+            }
+
+        } catch (error) {
+            logger.error(`Error in match_title_update: ${error.message}`, { error });
+            socket.emit('match_update_error', {
+                error: error.message || 'Đã xảy ra lỗi khi cập nhật thông tin trận đấu',
+                code: 'UPDATE_ERROR',
+                timestamp: Date.now()
+            });
+        }
+    });
 
     // Score updates
     socket.on('score_update', (data) => {
@@ -204,7 +304,7 @@ function handleMatchData(io, socket, rooms, userSessions) {
 
     // Team logos update
     socket.on('team_logos_update', (data) => {
-        console.log("Giá trị Team logos update", data);
+        // console.log("Giá trị Team logos update", data);
         try {
             const { accessCode, logos, timestamp = Date.now() } = data;
 

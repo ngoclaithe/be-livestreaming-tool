@@ -18,6 +18,22 @@ async function updateDisplaySettings(accessCode, type, items) {
 
     for (let i = 0; i < maxLength; i++) {
       if (codeLogos[i] && urlLogos[i] && positions[i]) {
+        let processedUrlLogo = urlLogos[i];
+        const prefixes = [
+          'http://localhost:5000/api/v1',
+          'https://scoliv2.com/api/v1',
+          'http://192.168.31.186:5000/api/v1'
+        ];
+        
+        if (processedUrlLogo && typeof processedUrlLogo === 'string') {
+          for (const prefix of prefixes) {
+            if (processedUrlLogo.startsWith(prefix)) {
+              processedUrlLogo = processedUrlLogo.substring(prefix.length);
+              break;
+            }
+          }
+        }
+
         const existingRecord = await DisplaySetting.findOne({
           where: {
             accessCode,
@@ -31,10 +47,14 @@ async function updateDisplaySettings(accessCode, type, items) {
             type: type,
             code_logo: codeLogos[i],
             position: positions[i],
-            url_logo: urlLogos[i],
+            url_logo: processedUrlLogo, 
             type_display: typeDisplays[i] || 'default',
             accessCode: accessCode
           });
+        } else {
+          if (existingRecord.url_logo !== processedUrlLogo) {
+            await existingRecord.update({ url_logo: processedUrlLogo });
+          }
         }
       }
     }
@@ -424,14 +444,19 @@ function handleDisplaySettings(io, socket, rooms, userSessions) {
   });
 
   // Tournament logo update
-  socket.on('tournament_logo_update', (data) => {
-    // console.log('📨 Received tournament_logo_update:', data);
+  socket.on('tournament_logo_update', async (data) => {
+    console.log('📨 Received tournament_logo_update:', data);
     
     try {
-      const { accessCode, tournament_logo, timestamp = Date.now() } = data;     
-      if (!accessCode || !tournament_logo) {
-        throw new Error('Access code and tournament_logo data are required');
+      // Handle both tournament_logo and tournamentLogo property names
+      const { accessCode, tournament_logo, tournamentLogo, timestamp = Date.now() } = data;     
+      const tournamentLogoData = tournament_logo || tournamentLogo;
+      
+      if (!accessCode || !tournamentLogoData) {
+        throw new Error('Access code and tournament logo data are required');
       }
+      
+      const behavior = tournamentLogoData.behavior || 'add';
       
       const room = rooms.get(accessCode);
       
@@ -440,10 +465,9 @@ function handleDisplaySettings(io, socket, rooms, userSessions) {
       }
       
       const userData = userSessions.get(socket.id);
-      const isAdmin = userData && room.adminClients.has(socket.id);
       
       if (!userData || !room.adminClients.has(socket.id)) {
-        throw new Error('Unauthorized: Only admin can update tournament_logo');
+        throw new Error('Unauthorized: Only admin can update tournament logo');
       }
       
       if (!room.currentState.tournament_logo) {
@@ -455,28 +479,66 @@ function handleDisplaySettings(io, socket, rooms, userSessions) {
         };
       }
       
-      if (tournament_logo.code_logo !== undefined) {
-        room.currentState.tournament_logo.code_logo = tournament_logo.code_logo || [];
-      }
-      if (tournament_logo.url_logo !== undefined) {
-        room.currentState.tournament_logo.url_logo = tournament_logo.url_logo || [];
-      }
-      if (tournament_logo.position !== undefined) {
-        room.currentState.tournament_logo.position = tournament_logo.position || [];
-      }
-      if (tournament_logo.type_display !== undefined) {
-        room.currentState.tournament_logo.type_display = tournament_logo.type_display || [];
-      }
+      // Update each field if provided
+      const fields = ['code_logo', 'url_logo', 'position', 'type_display'];
+      fields.forEach(field => {
+        if (tournamentLogoData[field] !== undefined) {
+          room.currentState.tournament_logo[field] = Array.isArray(tournamentLogoData[field])
+            ? [...tournamentLogoData[field]]
+            : [];
+        }
+      });
       
       room.lastActivity = timestamp;
       
-      // Broadcast to all clients in the room
+      // Xử lý dựa trên behavior
+      if (behavior === 'remove') {
+        // Xóa khỏi database
+        try {
+          await DisplaySetting.destroy({
+            where: {
+              accessCode,
+              type: 'tournament_logo',
+              code_logo: tournamentLogoData.code_logo?.[0] 
+            }
+          });
+        } catch (error) {
+          console.error('❌ Lỗi khi xóa tournament_logo khỏi database:', error.message);
+          throw error;
+        }
+      } else if (behavior === 'update') {
+        try {
+          await DisplaySetting.update(
+            { position: tournamentLogoData.position?.[0] },
+            {
+              where: {
+                accessCode,
+                type: 'tournament_logo',
+                code_logo: tournamentLogoData.code_logo?.[0]
+              }
+            }
+          );
+        } catch (error) {
+          console.error('❌ Lỗi khi cập nhật vị trí tournament_logo trong database:', error.message);
+          throw error;
+        }
+      } else if (behavior === 'add') {
+        try {
+          await updateDisplaySettings(accessCode, 'tournament_logo', room.currentState.tournament_logo);
+        } catch (error) {
+          console.error('❌ Lỗi khi lưu tournament_logo vào database:', error.message);
+          throw error;
+        }
+      }
+      
       io.to(`room_${accessCode}`).emit('tournament_logo_updated', {
-        tournament_logo: room.currentState.tournament_logo,
+        tournamentLogo: room.currentState.tournament_logo,
+        behavior: behavior,
         timestamp: timestamp
       });
       
-      // console.log('📤 Broadcasted to room:', accessCode);
+      console.log('✅ Đã cập nhật và gửi lại dữ liệu tournament logo');
+      console.log("Giá trị trả về tournament_logo_updated:", room.currentState.tournament_logo);
       
     } catch (error) {
       console.error('❌ Error in tournament_logo_update:', error.message);

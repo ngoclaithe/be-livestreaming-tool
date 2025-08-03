@@ -1,6 +1,5 @@
 const logger = require('../utils/logger');
 
-// Import socket handlers
 const { handleConnection } = require('../socketHandlers/connection');
 const { handleRoomManagement } = require('../socketHandlers/roomManagement');
 const { handleViewUpdates } = require('../socketHandlers/viewUpdates');
@@ -17,34 +16,25 @@ class WebSocketService {
     this.userSessions = new Map(); // socketId -> userData
   }
 
-  /**
-   * Initialize the WebSocket server with all event handlers
-   */
   initialize() {
     this.io.on('connection', (socket) => {
       logger.info(`New WebSocket connection: ${socket.id}`);
       
-      // Store the socket connection
       this.connections.set(socket.id, socket);
       
-      // Initialize all socket event handlers
       this.initializeSocketHandlers(socket);
             
-      // Handle joining commentary room
       socket.on('join_commentary_room', (data) => {
         joinCommentaryRoom(socket, data);
       });
       
-      // Handle disconnection
       socket.on('disconnect', () => {
         logger.info(`Client disconnected: ${socket.id}`);
         this.connections.delete(socket.id);
         
-        // Clean up user session
         this.userSessions.delete(socket.id);
       });
       
-      // Setup timer tick for this room if it's an admin connection
       socket.on('join_room', (data) => {
         if (data.clientType === 'admin' && data.accessCode) {
           this.setupTimerForRoom(data.accessCode);
@@ -52,17 +42,12 @@ class WebSocketService {
       });
     });
 
-    // Periodically clean up inactive rooms
     this.setupCleanupInterval();
 
     return this.io;
   }
-  
-  /**
-   * Initialize all socket event handlers
-   */
+
   initializeSocketHandlers(socket) {
-    // Initialize user session
     this.userSessions.set(socket.id, {
       socketId: socket.id,
       joinedAt: new Date(),
@@ -71,7 +56,6 @@ class WebSocketService {
       currentRoom: null
     });
 
-    // Initialize all modular handlers
     handleConnection(this.io, socket, this.rooms, this.userSessions);
     handleRoomManagement(this.io, socket, this.rooms, this.userSessions);
     handleViewUpdates(this.io, socket, this.rooms, this.userSessions);
@@ -80,34 +64,24 @@ class WebSocketService {
     handleTimer(this.io, socket, this.rooms, this.userSessions);
     handleAudioUpdates(this.io, socket, this.rooms, this.userSessions);
     
-    // Add any additional global handlers here
     this.setupGlobalHandlers(socket);
   }
-  
-  /**
-   * Setup global socket event handlers
-   */
+
   setupGlobalHandlers(socket) {
-    // Handle errors
     socket.on('error', (error) => {
       logger.error(`Socket error (${socket.id}):`, error);
     });
     
-    // Ping/pong for connection health
     socket.on('ping', (cb) => {
       if (typeof cb === 'function') {
         cb('pong');
       }
     });
   }
-  
-  /**
-   * Set up periodic cleanup of inactive rooms
-   */
+
   setupCleanupInterval() {
-    // Clean up rooms that have been inactive for more than 24 hours
-    const CLEANUP_INTERVAL = 60 * 60 * 1000; // 1 hour
-    const MAX_INACTIVE_TIME = 24 * 60 * 60 * 1000; // 24 hours
+    const CLEANUP_INTERVAL = 60 * 60 * 1000; 
+    const MAX_INACTIVE_TIME = 24 * 60 * 60 * 1000; 
     
     setInterval(() => {
       const now = Date.now();
@@ -126,9 +100,6 @@ class WebSocketService {
     }, CLEANUP_INTERVAL);
   }
   
-  /**
-   * Helper method to broadcast room state updates
-   */
   broadcastRoomState(roomId, event, data) {
     const room = this.rooms.get(roomId);
     if (room) {
@@ -139,21 +110,15 @@ class WebSocketService {
     }
   }
   
-  /**
-   * Get the current state of a room
-   */
+
   getRoomState(accessCode) {
     const room = this.rooms.get(accessCode);
     return room ? room.currentState : null;
   }
   
-  /**
-   * Update room state and broadcast changes
-   */
   updateRoomState(accessCode, updates) {
     const room = this.rooms.get(accessCode);
     if (room) {
-      // Deep merge the updates into the current state
       Object.assign(room.currentState, updates);
       room.lastActivity = Date.now();
       return true;
@@ -206,6 +171,8 @@ class WebSocketService {
       { event: 'template_updated', data: { templateId: room.templateId } },
       { event: 'poster_updated', data: { posterType: room.posterType } },
       { event: 'sponsors_updated', data: { sponsors: room.sponsors } },
+      { event: 'match_title_updated', data: { matchTitle: room.matchTitle } },
+      { event: 'match_info_updated', data: { matchInfo: room.matchInfo } },
       // Timer events
       { event: 'timer_started', data: { initialTime: room.timer?.displayTime || '00:00' } },
       { event: 'timer_paused', data: { 

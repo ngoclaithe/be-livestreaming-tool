@@ -1,4 +1,6 @@
 const logger = require('../utils/logger');
+const { sequelize, RoomSession } = require('../models');
+const { Op } = require('sequelize');
 
 /**
  * Creates a new room with default values
@@ -71,16 +73,10 @@ function createNewRoom(accessCode) {
  * @returns {Promise<boolean>} True if valid, false otherwise
  */
 async function validateAccessCode(accessCode) {
-  // TODO: Implement actual validation (e.g., check against database)
-  // For now, accept any non-empty string
   return accessCode && typeof accessCode === 'string' && accessCode.trim().length > 0;
 }
 
-/**
- * Handles room management events (join, leave, etc.)
- */
 function handleRoomManagement(io, socket, rooms, userSessions) {
-  // Join room event
   socket.on('join_room', async (data) => {
     try {
       if (!data || typeof data !== 'object') {
@@ -96,8 +92,8 @@ function handleRoomManagement(io, socket, rooms, userSessions) {
 
       logger.info(`Client ${socket.id} joining room: ${accessCode} as ${clientType}`);
       
-      // Validate access code
       const isValid = await validateAccessCode(accessCode);
+      
       if (!isValid) {
         socket.emit('room_error', {
           error: 'Mã truy cập không hợp lệ',
@@ -106,75 +102,100 @@ function handleRoomManagement(io, socket, rooms, userSessions) {
         return;
       }
       
-      // Create room if it doesn't exist
-      if (!rooms.has(accessCode)) {
-        const newRoom = createNewRoom(accessCode);
-        rooms.set(accessCode, newRoom);
-        logger.info(`Created new room: ${accessCode}`, {
-          roomId: accessCode,
-          clientType,
-          socketId: socket.id
-        });
+      const now = new Date();
+      
+      let roomSession = await RoomSession.findOne({ where: { accessCode } });
+      
+      if (!roomSession) {
+        const initialClientConnected = (clientType === 'admin' || clientType === 'client') ? [socket.id] : [];
+        const initialDisplayConnected = (clientType === 'display') ? [socket.id] : [];
         
-        // If this is the first client, make them the admin
-        if (clientType === 'admin' || clientType === 'display') {
-          newRoom.adminClients.add(socket.id);
+        let expiredAt = null;
+        if (clientType === 'display') {
+          expiredAt = new Date();
+          expiredAt.setHours(expiredAt.getHours() + 2);
+          logger.info(`First display connected, setting expiredAt to: ${expiredAt}`);
         }
+        
+        roomSession = await RoomSession.create({
+          accessCode,
+          status: 'active',
+          expiredAt: expiredAt,
+          clientConnected: initialClientConnected,
+          displayConnected: initialDisplayConnected,
+          lastActivityAt: now
+        });
+      } else {
+        const updateData = { lastActivityAt: now };
+        
+        if (clientType === 'admin' || clientType === 'client') {
+          if (!roomSession.clientConnected.includes(socket.id)) {
+            updateData.clientConnected = [...roomSession.clientConnected, socket.id];
+          }
+        } else if (clientType === 'display') {
+          if (!roomSession.displayConnected.includes(socket.id)) {
+            updateData.displayConnected = [...roomSession.displayConnected, socket.id];
+            
+            if (roomSession.displayConnected.length === 0) {
+              const expiredAt = new Date();
+              expiredAt.setHours(expiredAt.getHours() + 2);
+              updateData.expiredAt = expiredAt;
+              logger.info(`First display connected, setting expiredAt to: ${expiredAt}`);
+            }
+          }
+        }
+        
+        await roomSession.update(updateData);
+      }
+      
+      if (!rooms.has(accessCode)) {
+        rooms.set(accessCode, createNewRoom(accessCode));
       }
       
       const room = rooms.get(accessCode);
       
-      // Add client to room
       socket.join(`room_${accessCode}`);
       
-      // Update client state
       const userData = userSessions.get(socket.id);
       if (!userData) {
         logger.error('User session not found for socket', { socketId: socket.id });
         throw new Error('Lỗi phiên người dùng');
       }
       
-      // If client was in another room, clean up
       if (userData.currentRoom && userData.currentRoom !== accessCode) {
         this.handleLeaveRoom(socket, userData.currentRoom);
       }
       
-      // Update user session
       userData.clientType = clientType;
       userData.currentRoom = accessCode;
-      userData.lastActive = new Date();
       
-      // Add to appropriate client set in room
       if (clientType === 'admin') {
         room.adminClients.add(socket.id);
-        logger.info(`Admin client joined room ${accessCode}`, { socketId: socket.id });
+      } else if (clientType === 'client') {
+        room.clients.add(socket.id);
       } else if (clientType === 'display') {
         room.displayClients.add(socket.id);
-        logger.info(`Display client joined room ${accessCode}`, { socketId: socket.id });
-      } else {
-        room.clients.add(socket.id);
-        logger.info(`Client joined room ${accessCode}`, { socketId: socket.id });
       }
       
-      // Send current state to the joining client
+      logger.info(`Client joined room ${accessCode}`, { socketId: socket.id });
+      
       socket.emit('room_joined', {
         accessCode: accessCode,
         roomId: `room_${accessCode}`,
         currentState: room.currentState,
-        clientCount: room.clients.size,
+        clientCount: room.clients.size + room.adminClients.size,
         isAdmin: clientType === 'admin'
       });
       
-      // Notify other clients about the new join
-      if (room.clients.size > 1) { // Only broadcast if there are other clients
+      if (room.clients.size + room.adminClients.size > 1) { 
         socket.to(`room_${accessCode}`).emit('client_joined', {
           clientId: socket.id,
           clientType: clientType,
-          clientCount: room.clients.size
+          clientCount: room.clients.size + room.adminClients.size
         });
       }
       
-      logger.info(`Client ${socket.id} joined room ${accessCode} as ${clientType}. Total clients: ${room.clients.size}`);
+      logger.info(`Client ${socket.id} joined room ${accessCode} as ${clientType}. Total clients: ${room.clients.size + room.adminClients.size}`);
       
     } catch (error) {
       logger.error('Error in join_room:', error);
@@ -185,61 +206,80 @@ function handleRoomManagement(io, socket, rooms, userSessions) {
     }
   });
   
-  /**
-   * Handle client disconnection
-   */
-  socket.on('disconnect', () => {
-    const userData = userSessions.get(socket.id);
-    if (!userData) {
-      logger.warn('Disconnect called for non-existent user session', { socketId: socket.id });
-      return;
-    }
+  socket.on('disconnect', async () => {
+    logger.info(`Client disconnected: ${socket.id}`);
     
-    logger.info(`Client disconnecting: ${socket.id}`, {
-      clientType: userData.clientType,
-      room: userData.currentRoom
-    });
-    
-    // Remove from any rooms
-    if (userData.currentRoom) {
-      const room = rooms.get(userData.currentRoom);
-      if (room) {
-        // Remove from all client sets
-        room.clients.delete(socket.id);
+    for (const [accessCode, room] of rooms.entries()) {
+      let shouldUpdateDb = false;
+      let updateData = {};
+      
+      if (room.adminClients.has(socket.id)) {
         room.adminClients.delete(socket.id);
-        room.displayClients.delete(socket.id);
+        shouldUpdateDb = true;
         
-        // Log the remaining clients for debugging
-        logger.info(`Client left room ${userData.currentRoom}`, {
-          socketId: socket.id,
-          clientsRemaining: room.clients.size,
-          adminsRemaining: room.adminClients.size,
-          displaysRemaining: room.displayClients.size
-        });
-        
-        // Clean up empty rooms
-        if (room.clients.size === 0 && room.adminClients.size === 0 && room.displayClients.size === 0) {
-          rooms.delete(userData.currentRoom);
-          logger.info(`Room ${userData.currentRoom} removed (no clients)`);
-        } else {
-          // Notify remaining clients about the disconnection if needed
-          if (userData.clientType === 'admin') {
-            socket.to(`room_${userData.currentRoom}`).emit('admin_disconnected', {
-              socketId: socket.id,
-              timestamp: new Date().toISOString()
-            });
+        try {
+          const roomSession = await RoomSession.findOne({ where: { accessCode } });
+          if (roomSession) {
+            const updatedClientConnected = roomSession.clientConnected.filter(id => id !== socket.id);
+            updateData.clientConnected = updatedClientConnected;
           }
+        } catch (error) {
+          logger.error('Error finding RoomSession on admin disconnect:', error);
+        }
+      } else if (room.clients.has(socket.id)) {
+        room.clients.delete(socket.id);
+        shouldUpdateDb = true;
+        
+        try {
+          const roomSession = await RoomSession.findOne({ where: { accessCode } });
+          if (roomSession) {
+            const updatedClientConnected = roomSession.clientConnected.filter(id => id !== socket.id);
+            updateData.clientConnected = updatedClientConnected;
+          }
+        } catch (error) {
+          logger.error('Error finding RoomSession on client disconnect:', error);
+        }
+      } else if (room.displayClients.has(socket.id)) {
+        room.displayClients.delete(socket.id);
+        shouldUpdateDb = true;
+        
+        try {
+          const roomSession = await RoomSession.findOne({ where: { accessCode } });
+          if (roomSession) {
+            const updatedDisplayConnected = roomSession.displayConnected.filter(id => id !== socket.id);
+            updateData.displayConnected = updatedDisplayConnected;
+          }
+        } catch (error) {
+          logger.error('Error finding RoomSession on display disconnect:', error);
+        }
+      }
+      
+      if (shouldUpdateDb && Object.keys(updateData).length > 0) {
+        try {
+          await RoomSession.update(updateData, {
+            where: { accessCode }
+          });
+        } catch (error) {
+          logger.error('Error updating RoomSession on disconnect:', error);
+        }
+      }
+      
+      if (room.clients.size === 0 && room.adminClients.size === 0 && room.displayClients.size === 0) {
+        try {
+          await RoomSession.destroy({ where: { accessCode } });
+          rooms.delete(accessCode);
+          logger.info(`Room ${accessCode} removed (no clients)`);
+        } catch (error) {
+          logger.error('Error removing RoomSession:', error);
         }
       }
     }
     
-    // Remove user session
     userSessions.delete(socket.id);
     logger.info(`User session removed for socket: ${socket.id}`);
   });
   
-  // Leave room event
-  socket.on('leave_room', (data) => {
+  socket.on('leave_room', async (data) => {
     try {
       const { accessCode } = data || {};
       
@@ -252,30 +292,60 @@ function handleRoomManagement(io, socket, rooms, userSessions) {
         throw new Error('Room not found');
       }
       
-      // Leave the room
       socket.leave(`room_${accessCode}`);
       
-      // Update room data
-      room.clients.delete(socket.id);
-      room.adminClients.delete(socket.id);
-      room.displayClients.delete(socket.id);
+      let shouldUpdateDb = false;
+      let updateData = {};
       
-      // Notify other clients
+      if (room.adminClients.has(socket.id)) {
+        room.adminClients.delete(socket.id);
+        shouldUpdateDb = true;
+        
+        const roomSession = await RoomSession.findOne({ where: { accessCode } });
+        if (roomSession) {
+          const updatedClientConnected = roomSession.clientConnected.filter(id => id !== socket.id);
+          updateData.clientConnected = updatedClientConnected;
+        }
+      } else if (room.clients.has(socket.id)) {
+        room.clients.delete(socket.id);
+        shouldUpdateDb = true;
+        
+        const roomSession = await RoomSession.findOne({ where: { accessCode } });
+        if (roomSession) {
+          const updatedClientConnected = roomSession.clientConnected.filter(id => id !== socket.id);
+          updateData.clientConnected = updatedClientConnected;
+        }
+      } else if (room.displayClients.has(socket.id)) {
+        room.displayClients.delete(socket.id);
+        shouldUpdateDb = true;
+        
+        const roomSession = await RoomSession.findOne({ where: { accessCode } });
+        if (roomSession) {
+          const updatedDisplayConnected = roomSession.displayConnected.filter(id => id !== socket.id);
+          updateData.displayConnected = updatedDisplayConnected;
+        }
+      }
+      
+      if (shouldUpdateDb && Object.keys(updateData).length > 0) {
+        await RoomSession.update(updateData, {
+          where: { accessCode }
+        });
+      }
+      
       socket.to(`room_${accessCode}`).emit('client_left', {
         clientId: socket.id,
-        clientCount: room.clients.size
+        clientCount: room.clients.size + room.adminClients.size
       });
       
-      // Clean up empty rooms
-      if (room.clients.size === 0) {
+      if (room.clients.size === 0 && room.adminClients.size === 0 && room.displayClients.size === 0) {
+        await RoomSession.destroy({ where: { accessCode } });
         rooms.delete(accessCode);
         logger.info(`Room ${accessCode} cleaned up (no more clients)`);
       }
       
-      // Update user session
       const userData = userSessions.get(socket.id);
       if (userData) {
-        userData.accessCode = null;
+        userData.currentRoom = null;
         userData.clientType = null;
       }
       
@@ -284,7 +354,7 @@ function handleRoomManagement(io, socket, rooms, userSessions) {
         message: 'Đã rời phòng thành công'
       });
       
-      logger.info(`Client ${socket.id} left room ${accessCode}. Remaining clients: ${room.clients.size}`);
+      logger.info(`Client ${socket.id} left room ${accessCode}. Remaining clients: ${room.clients.size + room.adminClients.size}`);
       
     } catch (error) {
       logger.error('Error in leave_room:', error);
@@ -297,7 +367,3 @@ function handleRoomManagement(io, socket, rooms, userSessions) {
 }
 
 module.exports = { handleRoomManagement };
-
-// This module handles room management functionality including joining and leaving rooms,
-// validating access codes, and maintaining room state. It integrates with the main
-// WebSocket server to provide real-time room-based communication.

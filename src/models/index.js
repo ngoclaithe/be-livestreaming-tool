@@ -29,7 +29,6 @@ function setupAssociations() {
       onUpdate: 'CASCADE'
     });
 
-    
     Match.belongsTo(User, { 
       foreignKey: 'createdBy', 
       as: 'creator' 
@@ -73,7 +72,7 @@ function setupAssociations() {
       as: 'revoker' 
     });
 
-        // Match has many AccessCodes
+    // Match has many AccessCodes
     Match.hasMany(AccessCode, { 
       foreignKey: 'matchId', 
       as: 'accessCodes',
@@ -99,6 +98,25 @@ function setupAssociations() {
       foreignKey: 'accessCode',
       targetKey: 'code',
       as: 'accessCodeData'
+    });
+
+    // *** THÊM QUAN HỆ CHO ROOMSESSION ***
+    // RoomSession belongs to AccessCode
+    RoomSession.belongsTo(AccessCode, {
+      foreignKey: 'accessCode',
+      targetKey: 'code',
+      as: 'accessCodeInfo',
+      onDelete: 'CASCADE',
+      onUpdate: 'CASCADE'
+    });
+
+    // AccessCode has one RoomSession
+    AccessCode.hasOne(RoomSession, {
+      foreignKey: 'accessCode',
+      sourceKey: 'code',
+      as: 'roomSession',
+      onDelete: 'CASCADE',
+      onUpdate: 'CASCADE'
     });
 
     console.log('✅ Model associations set up successfully');

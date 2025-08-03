@@ -55,26 +55,4 @@ const RoomSession = sequelize.define('RoomSession', {
     underscored: false
 });
 
-// Thiết lập quan hệ với AccessCode
-RoomSession.associate = function(models) {
-    // Sử dụng string thay vì model để tránh vòng lặp phụ thuộc
-    RoomSession.belongsTo(models.AccessCode, {
-        foreignKey: 'accessCode',
-        targetKey: 'code',
-        as: 'accessCodeInfo',
-        onDelete: 'CASCADE',
-        onUpdate: 'CASCADE'
-    });
-
-    // Thêm quan hệ ngược lại từ AccessCode
-    models.AccessCode.hasOne(RoomSession, {
-        foreignKey: 'accessCode',
-        sourceKey: 'code',
-        as: 'roomSession',
-        onDelete: 'CASCADE',
-        onUpdate: 'CASCADE'
-    });
-};
-
-// Export model
 module.exports = RoomSession;
