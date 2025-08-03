@@ -4,6 +4,7 @@ const InfoPayment = require('../models/InfoPayment');
 exports.create = async (req, res) => {
     try {
         const { name, accountNumber, bank, email, password_app } = req.body;
+        // console.log("Giá trị nhận được là:", req.body);
         
         // Kiểm tra các trường bắt buộc
         if (!name || !accountNumber || !bank || !email || !password_app) {
