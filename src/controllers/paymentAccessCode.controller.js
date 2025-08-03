@@ -13,7 +13,7 @@ exports.createPaymentRequest = async (req, res, next) => {
   let responded = false;
 
   try {
-    console.log('🔥 [PaymentAccessCode Controller] Create payment request started', req.body);
+    // console.log('🔥 [PaymentAccessCode Controller] Create payment request started', req.body);
     
     const { accessCode, amount, transactionNote } = req.body;
     
@@ -23,7 +23,6 @@ exports.createPaymentRequest = async (req, res, next) => {
       return next(new ApiError('Vui lòng cung cấp mã truy cập và số tiền', StatusCodes.BAD_REQUEST));
     }
 
-    // Kiểm tra accessCode có tồn tại không
     const existingAccessCode = await AccessCode.findOne({
       where: { code: accessCode }
     });
@@ -34,9 +33,8 @@ exports.createPaymentRequest = async (req, res, next) => {
       return next(new ApiError('Mã truy cập không tồn tại', StatusCodes.NOT_FOUND));
     }
 
-    // Lấy thông tin thanh toán từ InfoPayment (lấy record đầu tiên hoặc theo logic business của bạn)
     const paymentInfo = await InfoPayment.findOne({
-      order: [['createdAt', 'ASC']] // Hoặc có thể thêm điều kiện where nếu cần
+      order: [['createdAt', 'ASC']] 
     }, { transaction: t });
 
     if (!paymentInfo) {
@@ -44,8 +42,6 @@ exports.createPaymentRequest = async (req, res, next) => {
       responded = true;
       return next(new ApiError('Không tìm thấy thông tin thanh toán trong hệ thống', StatusCodes.NOT_FOUND));
     }
-
-    // Kiểm tra yêu cầu thanh toán đã tồn tại chưa
     const existingRequest = await PaymentAccessCode.findOne({
       where: {
         access_code: accessCode,
@@ -53,21 +49,22 @@ exports.createPaymentRequest = async (req, res, next) => {
       }
     });
 
+    console.log(" Giá trị của existingRequest", existingRequest);
+
     if (existingRequest) {
       await t.rollback();
       responded = true;
       
-      // Trả về thông tin yêu cầu thanh toán đã tồn tại
       return res.status(StatusCodes.OK).json({
         success: true,
         message: 'Yêu cầu thanh toán cho mã này đã tồn tại',
         data: {
           id: existingRequest.id,
           code_pay: existingRequest.code_pay,
-          accessCode: existingRequest.accessCode,
-          bankAccountNumber: existingRequest.bankAccountNumber,
-          bankName: existingRequest.bankName,
-          accountHolderName: existingRequest.accountHolderName,
+          accessCode: existingRequest.access_code,
+          accountNumber: existingRequest.bank_account_number,
+          bank: existingRequest.bank_name,
+          name: existingRequest.name || "",
           amount: existingRequest.amount,
           status: existingRequest.status,
           created_at: existingRequest.createdAt
@@ -75,32 +72,39 @@ exports.createPaymentRequest = async (req, res, next) => {
       });
     }
 
-    const code_pay = PaymentAccessCode.generatePaymentCode();
+    const code_pay = await PaymentAccessCode.generatePaymentCode();
 
-    // Tạo yêu cầu thanh toán với thông tin từ InfoPayment
+    if (!paymentInfo) {
+      await t.rollback();
+      responded = true;
+      return next(new ApiError('Không tìm thấy thông tin thanh toán', StatusCodes.NOT_FOUND));
+    }
+
     const paymentRequest = await PaymentAccessCode.create({
-      userId: req.user.id,
-      accessCode,
-      code_pay,
-      bankAccountNumber: paymentInfo.accountNumber,
-      bankName: paymentInfo.bank,
-      accountHolderName: paymentInfo.name, // Thêm tên chủ tài khoản
-      amount: parseFloat(amount),
-      transactionNote
+      user_id: req.user.id,
+      access_code: accessCode,
+      code_pay: code_pay,
+      bank_account_number: paymentInfo.accountNumber || '',
+      bank_name: paymentInfo.bank || 'Ngân hàng chưa xác định',
+      account_holder_name: paymentInfo.name || 'Chủ tài khoản chưa xác định',
+      amount: parseFloat(amount) || 0,
+      transaction_note: transactionNote || ''
     }, { transaction: t });
 
     await t.commit();
     responded = true;
+
+    console.log("Giá trị của payment request", paymentRequest);
 
     return res.status(StatusCodes.CREATED).json({
       success: true,
       data: {
         id: paymentRequest.id,
         code_pay: paymentRequest.code_pay,
-        accessCode: paymentRequest.accessCode,
-        bankAccountNumber: paymentRequest.bankAccountNumber,
-        bankName: paymentRequest.bankName,
-        accountHolderName: paymentRequest.accountHolderName,
+        accessCode: paymentRequest.access_code,
+        accountNumber: paymentRequest.bank_account_number,
+        bank: paymentRequest.bank_name,
+        name: paymentRequest.name || "name",
         amount: paymentRequest.amount,
         status: paymentRequest.status,
         created_at: paymentRequest.createdAt

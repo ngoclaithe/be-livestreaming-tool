@@ -35,6 +35,11 @@ const PaymentAccessCode = sequelize.define('PaymentAccessCode', {
     allowNull: false,
     comment: 'Số tài khoản ngân hàng nhận tiền',
   },
+  name: {
+    type: DataTypes.STRING(100),
+    allowNull: true,
+    comment: "Tên người nhận tiền",
+  },
   bank_name: {
     type: DataTypes.STRING(100),
     allowNull: false,
