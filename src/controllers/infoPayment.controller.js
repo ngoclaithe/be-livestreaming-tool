@@ -1,17 +1,12 @@
 const InfoPayment = require('../models/InfoPayment');
 
-// Tạo mới thông tin thanh toán
 exports.create = async (req, res) => {
     try {
         const { name, accountNumber, bank, email, password_app } = req.body;
-        // console.log("Giá trị nhận được là:", req.body);
-        
-        // Kiểm tra các trường bắt buộc
         if (!name || !accountNumber || !bank || !email || !password_app) {
             return res.status(400).json({ message: 'Vui lòng điền đầy đủ thông tin' });
         }
 
-        // Tạo mới thông tin thanh toán
         const newInfoPayment = await InfoPayment.create({
             name,
             accountNumber,

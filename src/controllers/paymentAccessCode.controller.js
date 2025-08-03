@@ -6,22 +6,24 @@ const { StatusCodes } = require('http-status-codes');
 const logger = require('../utils/logger');
 const { sequelize } = require('../config/database');
 const { Op } = require('sequelize');
+const InfoPayment = require('../models/InfoPayment');
 
 exports.createPaymentRequest = async (req, res, next) => {
   const t = await sequelize.transaction();
   let responded = false;
 
   try {
-    console.log('🔥 [PaymentAccessCode Controller] Create payment request started');
+    console.log('🔥 [PaymentAccessCode Controller] Create payment request started', req.body);
     
-    const { accessCode, bankAccountNumber, bankName, amount, transactionNote } = req.body;
+    const { accessCode, amount, transactionNote } = req.body;
     
-    if (!accessCode || !bankAccountNumber || !bankName || !amount) {
+    if (!accessCode || !amount) {
       await t.rollback();
       responded = true;
-      return next(new ApiError('Vui lòng cung cấp đầy đủ thông tin bắt buộc', StatusCodes.BAD_REQUEST));
+      return next(new ApiError('Vui lòng cung cấp mã truy cập và số tiền', StatusCodes.BAD_REQUEST));
     }
 
+    // Kiểm tra accessCode có tồn tại không
     const existingAccessCode = await AccessCode.findOne({
       where: { code: accessCode }
     });
@@ -32,6 +34,18 @@ exports.createPaymentRequest = async (req, res, next) => {
       return next(new ApiError('Mã truy cập không tồn tại', StatusCodes.NOT_FOUND));
     }
 
+    // Lấy thông tin thanh toán từ InfoPayment (lấy record đầu tiên hoặc theo logic business của bạn)
+    const paymentInfo = await InfoPayment.findOne({
+      order: [['createdAt', 'ASC']] // Hoặc có thể thêm điều kiện where nếu cần
+    }, { transaction: t });
+
+    if (!paymentInfo) {
+      await t.rollback();
+      responded = true;
+      return next(new ApiError('Không tìm thấy thông tin thanh toán trong hệ thống', StatusCodes.NOT_FOUND));
+    }
+
+    // Kiểm tra yêu cầu thanh toán đã tồn tại chưa
     const existingRequest = await PaymentAccessCode.findOne({
       where: {
         accessCode: accessCode,
@@ -53,6 +67,7 @@ exports.createPaymentRequest = async (req, res, next) => {
           accessCode: existingRequest.accessCode,
           bankAccountNumber: existingRequest.bankAccountNumber,
           bankName: existingRequest.bankName,
+          accountHolderName: existingRequest.accountHolderName,
           amount: existingRequest.amount,
           status: existingRequest.status,
           created_at: existingRequest.createdAt
@@ -62,12 +77,14 @@ exports.createPaymentRequest = async (req, res, next) => {
 
     const code_pay = PaymentAccessCode.generatePaymentCode();
 
+    // Tạo yêu cầu thanh toán với thông tin từ InfoPayment
     const paymentRequest = await PaymentAccessCode.create({
       userId: req.user.id,
       accessCode,
       code_pay,
-      bankAccountNumber,
-      bankName,
+      bankAccountNumber: paymentInfo.accountNumber,
+      bankName: paymentInfo.bank,
+      accountHolderName: paymentInfo.name, // Thêm tên chủ tài khoản
       amount: parseFloat(amount),
       transactionNote
     }, { transaction: t });
@@ -83,6 +100,7 @@ exports.createPaymentRequest = async (req, res, next) => {
         accessCode: paymentRequest.accessCode,
         bankAccountNumber: paymentRequest.bankAccountNumber,
         bankName: paymentRequest.bankName,
+        accountHolderName: paymentRequest.accountHolderName,
         amount: paymentRequest.amount,
         status: paymentRequest.status,
         created_at: paymentRequest.createdAt
