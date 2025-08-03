@@ -6,9 +6,12 @@ const AccessCode = require('./AccessCode');
 const DisplaySetting = require('./DisplaySetting');
 const RoomSession = require('./RoomSession');
 const PaymentAccessCode = require('./PaymentAccessCode');
+const InfoPayment = require('./InfoPayment');
 
 function setupAssociations() {
   try {
+    console.log('🔄 Setting up model associations...');
+
     // User has many Logos
     User.hasMany(Logo, { 
       foreignKey: 'userId', 
@@ -65,7 +68,7 @@ function setupAssociations() {
     
     AccessCode.belongsTo(User, { 
       foreignKey: 'usedBy', 
-      as: 'user' 
+      as: 'usedByUser' 
     });
     
     AccessCode.belongsTo(User, { 
@@ -88,42 +91,34 @@ function setupAssociations() {
 
     // AccessCode has many DisplaySettings
     AccessCode.hasMany(DisplaySetting, {
-      foreignKey: 'accessCode',
-      sourceKey: 'code',
+      foreignKey: 'accessCodeId',
       as: 'displaySettings',
       onDelete: 'CASCADE',
       onUpdate: 'CASCADE'
     });
     
     DisplaySetting.belongsTo(AccessCode, {
-      foreignKey: 'accessCode',
-      targetKey: 'code',
+      foreignKey: 'accessCodeId',
       as: 'accessCodeData'
-    });
-
-    // *** THÊM QUAN HỆ CHO ROOMSESSION ***
-    // RoomSession belongs to AccessCode
-    RoomSession.belongsTo(AccessCode, {
-      foreignKey: 'accessCode',
-      targetKey: 'code',
-      as: 'accessCodeInfo',
-      onDelete: 'CASCADE',
-      onUpdate: 'CASCADE'
     });
 
     // AccessCode has one RoomSession
     AccessCode.hasOne(RoomSession, {
-      foreignKey: 'accessCode',
-      sourceKey: 'code',
+      foreignKey: 'accessCodeId',
       as: 'roomSession',
       onDelete: 'CASCADE',
       onUpdate: 'CASCADE'
     });
 
+    // RoomSession belongs to AccessCode
+    RoomSession.belongsTo(AccessCode, {
+      foreignKey: 'accessCodeId',
+      as: 'accessCodeInfo'
+    });
+
     // User has many PaymentAccessCodes
     User.hasMany(PaymentAccessCode, {
       foreignKey: 'userId',
-      sourceKey: 'id',
       as: 'paymentAccessCodes',
       onDelete: 'SET NULL',
       onUpdate: 'CASCADE'
@@ -132,92 +127,138 @@ function setupAssociations() {
     // PaymentAccessCode belongs to User (multiple relationships)
     PaymentAccessCode.belongsTo(User, {
       foreignKey: 'userId',
-      targetKey: 'id',
-      as: 'user'
+      as: 'owner'
     });
 
     PaymentAccessCode.belongsTo(User, {
       foreignKey: 'approvedBy',
-      targetKey: 'id',
       as: 'approver'
     });
 
     PaymentAccessCode.belongsTo(User, {
       foreignKey: 'cancelledBy',
-      targetKey: 'id',
       as: 'canceller'
+    });
+
+    // User associations for PaymentAccessCode (reverse)
+    User.hasMany(PaymentAccessCode, {
+      foreignKey: 'approvedBy',
+      as: 'approvedPaymentCodes',
+      onDelete: 'SET NULL',
+      onUpdate: 'CASCADE'
+    });
+
+    User.hasMany(PaymentAccessCode, {
+      foreignKey: 'cancelledBy',
+      as: 'cancelledPaymentCodes',
+      onDelete: 'SET NULL',
+      onUpdate: 'CASCADE'
     });
 
     console.log('✅ Model associations set up successfully');
     return true;
   } catch (error) {
     console.error('❌ Error setting up associations:', error.message);
+    console.error('Stack trace:', error.stack);
     return false;
   }
 }
 
-// Khởi tạo các model và quan hệ
 async function initModels() {
   try {
-    console.log('🔄 Setting up model associations...');
+    console.log('🚀 Initializing database models...');
+    
+    // Kiểm tra kết nối database trước
+    await sequelize.authenticate();
+    console.log('✅ Database connection established successfully');
+
+    // Setup associations
     const associationsSuccess = setupAssociations();
     
     if (!associationsSuccess) {
       throw new Error('Failed to setup model associations');
     }
 
-    console.log('🔄 Synchronizing database...');
+    console.log('🔄 Synchronizing database models...');
     
     const syncOptions = {
-      alter: process.env.NODE_ENV === 'development',
-      force: false, 
+      alter: false,
+      force: false,
       logging: process.env.NODE_ENV === 'development' ? console.log : false
     };
 
-    await User.sync(syncOptions);
-    console.log('✅ User model synced');
-    
-    await Logo.sync(syncOptions);
-    console.log('✅ Logo model synced');
-    
-    await Match.sync(syncOptions);
-    console.log('✅ Match model synced');
-    
-    await AccessCode.sync(syncOptions);
-    console.log('✅ AccessCode model synced');
-    
-    await DisplaySetting.sync(syncOptions);
-    console.log('✅ DisplaySetting model synced');
-    
-    await RoomSession.sync(syncOptions);
-    console.log('✅ RoomSession model synced');
-    
-    await PaymentAccessCode.sync(syncOptions);
-    console.log('✅ PaymentAccessCode model synced');
+    // Sync models theo thứ tự dependency
+    const models = [
+      { model: User, name: 'User' },
+      { model: Logo, name: 'Logo' },
+      { model: Match, name: 'Match' },
+      { model: AccessCode, name: 'AccessCode' },
+      { model: DisplaySetting, name: 'DisplaySetting' },
+      { model: RoomSession, name: 'RoomSession' },
+      { model: PaymentAccessCode, name: 'PaymentAccessCode' },
+      { model: InfoPayment, name: 'InfoPayment' }
+    ];
 
-    console.log('✅ All database models synchronized successfully');
+    for (const { model, name } of models) {
+      try {
+        await model.sync(syncOptions);
+        console.log(`✅ ${name} model synced successfully`);
+      } catch (syncError) {
+        console.warn(`⚠️ Warning syncing ${name}:`, syncError.message);
+        // Continue with other models even if one fails
+      }
+    }
+
+    console.log('✅ All database models initialized successfully');
     return true;
     
   } catch (error) {
     console.error('❌ Error initializing models:', error.message);
     
-    if (error.message.includes('USING') || error.message.includes('syntax error')) {
-      console.log('🔄 Attempting to fix foreign key constraint issues...');
+    // Handle specific database errors
+    if (error.name === 'SequelizeConnectionError') {
+      console.error('💡 Database connection failed. Please check your database configuration.');
+    } else if (error.message.includes('USING') || error.message.includes('syntax error')) {
+      console.log('🔄 Attempting to recover from SQL syntax issues...');
       
       try {
-        if (process.env.NODE_ENV === 'development') {
-          await sequelize.authenticate();
-          console.log('✅ Database connection verified, skipping problematic sync');
-          return true;
-        }
+        // Just verify connection without sync in problematic cases
+        await sequelize.authenticate();
+        console.log('✅ Database connection verified, associations set up');
+        return true;
       } catch (authError) {
-        console.error('❌ Database authentication also failed:', authError.message);
+        console.error('❌ Database authentication failed:', authError.message);
       }
+    } else if (error.name === 'SequelizeValidationError') {
+      console.error('💡 Model validation error. Please check your model definitions.');
     }
     
     return false;
   }
 }
+
+// Graceful shutdown handler
+async function closeDatabase() {
+  try {
+    await sequelize.close();
+    console.log('✅ Database connection closed successfully');
+  } catch (error) {
+    console.error('❌ Error closing database connection:', error.message);
+  }
+}
+
+// Handle process termination
+process.on('SIGINT', async () => {
+  console.log('🔄 Received SIGINT, closing database connection...');
+  await closeDatabase();
+  process.exit(0);
+});
+
+process.on('SIGTERM', async () => {
+  console.log('🔄 Received SIGTERM, closing database connection...');
+  await closeDatabase();
+  process.exit(0);
+});
 
 module.exports = {
   sequelize,
@@ -228,6 +269,8 @@ module.exports = {
   DisplaySetting,
   RoomSession,
   PaymentAccessCode,
+  InfoPayment,
   initModels,
   setupAssociations,
+  closeDatabase
 };

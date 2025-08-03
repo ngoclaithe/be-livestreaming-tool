@@ -8,9 +8,8 @@ const PaymentAccessCode = sequelize.define('PaymentAccessCode', {
     primaryKey: true,
     autoIncrement: true,
   },
-  userId: {
+  user_id: {
     type: DataTypes.INTEGER,
-    field: 'user_id',
     allowNull: false,
     references: {
       model: 'Users',
@@ -20,7 +19,7 @@ const PaymentAccessCode = sequelize.define('PaymentAccessCode', {
     onUpdate: 'CASCADE',
     comment: 'ID người tạo yêu cầu',
   },
-  accessCode: {
+  access_code: {
     type: DataTypes.STRING(50),
     allowNull: false,
     comment: 'Mã truy cập cần kích hoạt',
@@ -31,12 +30,12 @@ const PaymentAccessCode = sequelize.define('PaymentAccessCode', {
     defaultValue: () => generateRandomCode(6),
     comment: 'Mã thanh toán 6 ký tự',
   },
-  bankAccountNumber: {
+  bank_account_number: {
     type: DataTypes.STRING(20),
     allowNull: false,
     comment: 'Số tài khoản ngân hàng nhận tiền',
   },
-  bankName: {
+  bank_name: {
     type: DataTypes.STRING(100),
     allowNull: false,
     comment: 'Tên ngân hàng nhận tiền',
@@ -52,22 +51,22 @@ const PaymentAccessCode = sequelize.define('PaymentAccessCode', {
     allowNull: false,
     comment: 'Số tiền cần thanh toán',
   },
-  transactionNote: {
+  transaction_note: {
     type: DataTypes.STRING(255),
     allowNull: true,
     comment: 'Ghi chú giao dịch',
   },
-  paymentProof: {
+  payment_proof: {
     type: DataTypes.STRING(255),
     allowNull: true,
     comment: 'Ảnh chứng từ thanh toán',
   },
-  approvedAt: {
+  approved_at: {
     type: DataTypes.DATE,
     allowNull: true,
     comment: 'Thời gian duyệt yêu cầu',
   },
-  approvedBy: {
+  approved_by: {
     type: DataTypes.INTEGER,
     allowNull: true,
     references: {
@@ -78,12 +77,12 @@ const PaymentAccessCode = sequelize.define('PaymentAccessCode', {
     onUpdate: 'CASCADE',
     comment: 'ID người duyệt yêu cầu',
   },
-  cancelledAt: {
+  cancelled_at: {
     type: DataTypes.DATE,
     allowNull: true,
     comment: 'Thời gian hủy yêu cầu',
   },
-  cancelledBy: {
+  cancelled_by: {
     type: DataTypes.INTEGER,
     allowNull: true,
     references: {
@@ -94,20 +93,24 @@ const PaymentAccessCode = sequelize.define('PaymentAccessCode', {
     onUpdate: 'CASCADE',
     comment: 'ID người hủy yêu cầu',
   },
-  cancellationReason: {
+  cancellation_reason: {
     type: DataTypes.STRING(500),
     allowNull: true,
     comment: 'Lý do hủy yêu cầu',
   },
 }, {
-  timestamps: true,
+  // Tên bảng trong database
   tableName: 'payment_access_codes',
-  underscored: true,
+  // Sử dụng timestamps (created_at, updated_at, deleted_at)
+  timestamps: true,
+  // Sử dụng soft delete (xóa mềm)
   paranoid: true,
+  // Định dạng tên cột: snake_case
+  underscored: true,
   comment: 'Quản lý yêu cầu kích hoạt code thanh toán',
   indexes: [
     {
-      fields: ['userId'],
+      fields: ['user_id'],
     },
     {
       fields: ['status'],
@@ -135,8 +138,8 @@ PaymentAccessCode.prototype.approve = async function(userId) {
   }
   
   this.status = 'completed';
-  this.approvedAt = new Date();
-  this.approvedBy = userId;
+  this.approved_at = new Date();
+  this.approved_by = userId;
   return this.save();
 };
 
@@ -146,15 +149,21 @@ PaymentAccessCode.prototype.cancel = async function(userId, reason) {
   }
   
   this.status = 'cancelled';
-  this.cancelledAt = new Date();
-  this.cancelledBy = userId;
-  this.cancellationReason = reason;
+  this.cancelled_at = new Date();
+  this.cancelled_by = userId;
+  this.cancellation_reason = reason;
   return this.save();
 };
 
 // Static method to generate unique payment code
-PaymentAccessCode.generatePaymentCode = function() {
-  return generateRandomCode(6);
+PaymentAccessCode.generatePaymentCode = async function() {
+  const code = generateRandomCode(6);
+  const exists = await this.findOne({ where: { code_pay: code } });
+  return exists ? this.generatePaymentCode() : code;
 };
+
+// Add aliases for backward compatibility if needed
+PaymentAccessCode.prototype.approve = PaymentAccessCode.prototype.approve;
+PaymentAccessCode.prototype.cancel = PaymentAccessCode.prototype.cancel;
 
 module.exports = PaymentAccessCode;
