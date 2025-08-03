@@ -7,6 +7,7 @@ const logger = require('../utils/logger');
 const { sequelize } = require('../config/database');
 const { Op } = require('sequelize');
 const InfoPayment = require('../models/InfoPayment');
+const { startOfDay, endOfDay } = require('date-fns');
 
 exports.createPaymentRequest = async (req, res, next) => {
   const t = await sequelize.transaction();
@@ -392,6 +393,7 @@ exports.getPaymentStats = async (req, res, next) => {
       return next(new ApiError('Chỉ admin mới có quyền xem thống kê', StatusCodes.FORBIDDEN));
     }
 
+    // Thống kê tổng hợp theo trạng thái
     const stats = await PaymentAccessCode.findAll({
       attributes: [
         'status',
@@ -402,15 +404,46 @@ exports.getPaymentStats = async (req, res, next) => {
       raw: true
     });
 
+    // Tổng số yêu cầu và tổng số tiền
     const totalRequests = await PaymentAccessCode.count();
     const totalAmount = await PaymentAccessCode.sum('amount');
+
+    // Thời điểm bắt đầu và kết thúc ngày hôm nay
+    const todayStart = startOfDay(new Date());
+    const todayEnd = endOfDay(new Date());
+
+    // Thống kê các chỉ số riêng
+    const [pendingOrders, completedToday, cancelledToday] = await Promise.all([
+      PaymentAccessCode.count({
+        where: { status: 'pending' }
+      }),
+      PaymentAccessCode.count({
+        where: {
+          status: 'completed',
+          createdAt: {
+            [Op.between]: [todayStart, todayEnd]
+          }
+        }
+      }),
+      PaymentAccessCode.count({
+        where: {
+          status: 'cancelled',
+          createdAt: {
+            [Op.between]: [todayStart, todayEnd]
+          }
+        }
+      })
+    ]);
 
     return res.status(StatusCodes.OK).json({
       success: true,
       data: {
         total_requests: totalRequests,
         total_amount: totalAmount || 0,
-        by_status: stats
+        by_status: stats,
+        pendingOrders,
+        completedToday,
+        cancelledToday
       }
     });
   } catch (error) {
@@ -418,5 +451,3 @@ exports.getPaymentStats = async (req, res, next) => {
     return next(error);
   }
 };
-
-console.log('PaymentAccessCode Controller exports:', Object.keys(module.exports));
