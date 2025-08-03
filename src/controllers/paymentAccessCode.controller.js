@@ -48,7 +48,7 @@ exports.createPaymentRequest = async (req, res, next) => {
     // Kiểm tra yêu cầu thanh toán đã tồn tại chưa
     const existingRequest = await PaymentAccessCode.findOne({
       where: {
-        accessCode: accessCode,
+        access_code: accessCode,
         status: 'pending'
       }
     });
