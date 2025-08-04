@@ -47,9 +47,9 @@ const Match = sequelize.define('Match', {
     comment: 'Match start time',
   },
   liveUnit: {
-    type: DataTypes.STRING(50),
+    type: DataTypes.STRING(200),
     allowNull: true,
-    defaultValue: null,
+    // defaultValue: 'NSB',
     comment: 'Current live unit for the match',
   },
   typeMatch: {
