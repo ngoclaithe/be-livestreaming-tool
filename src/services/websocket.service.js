@@ -1,7 +1,7 @@
 const logger = require('../utils/logger');
 
 const { handleConnection } = require('../socketHandlers/connection');
-const { handleRoomManagement } = require('../socketHandlers/roomManagement');
+const { handleRoomManagement, cleanupRoomTimeouts, handleRoomExpiration } = require('../socketHandlers/roomManagement');
 const { handleViewUpdates } = require('../socketHandlers/viewUpdates');
 const { handleMatchData } = require('../socketHandlers/matchData');
 const { handleDisplaySettings } = require('../socketHandlers/displaySettings');
@@ -12,8 +12,10 @@ class WebSocketService {
   constructor(io) {
     this.io = io;
     this.connections = new Map();
-    this.rooms = new Map(); // accessCode -> roomData
-    this.userSessions = new Map(); // socketId -> userData
+    this.rooms = new Map(); 
+    this.userSessions = new Map(); 
+    this.timerIntervals = new Map(); 
+    this.cleanupInterval = null; // Interval cho cleanup tổng quát
   }
 
   initialize() {
@@ -31,7 +33,6 @@ class WebSocketService {
       socket.on('disconnect', () => {
         logger.info(`Client disconnected: ${socket.id}`);
         this.connections.delete(socket.id);
-        
         this.userSessions.delete(socket.id);
       });
       
@@ -42,7 +43,8 @@ class WebSocketService {
       });
     });
 
-    this.setupCleanupInterval();
+    // Khởi tạo cleanup interval cho các task tổng quát
+    this.setupGeneralCleanupInterval();
 
     return this.io;
   }
@@ -78,26 +80,42 @@ class WebSocketService {
       }
     });
   }
-
-  setupCleanupInterval() {
-    const CLEANUP_INTERVAL = 60 * 60 * 1000; 
-    const MAX_INACTIVE_TIME = 24 * 60 * 60 * 1000; 
+  setupGeneralCleanupInterval() {
+    const CLEANUP_INTERVAL = 60 * 60 * 1000; // 1 giờ
+    const MAX_INACTIVE_TIME = 2 * 60 * 60 * 1000; // 2 giờ
     
-    setInterval(() => {
+    this.cleanupInterval = setInterval(() => {
       const now = Date.now();
       let roomsCleaned = 0;
+      let staleConnectionsCleaned = 0;
       
       for (const [accessCode, room] of this.rooms.entries()) {
-        if (now - room.lastActivity > MAX_INACTIVE_TIME && room.clients.size === 0) {
+        if (now - room.lastActivity > MAX_INACTIVE_TIME && 
+            room.clients.size === 0 && 
+            room.adminClients.size === 0 && 
+            room.displayClients.size === 0) {
           this.rooms.delete(accessCode);
+          this.cleanupTimerForRoom(accessCode);
           roomsCleaned++;
         }
       }
       
-      if (roomsCleaned > 0) {
-        logger.info(`Cleaned up ${roomsCleaned} inactive rooms`);
+      // Cleanup stale user sessions
+      for (const [socketId, session] of this.userSessions.entries()) {
+        if (now - session.lastActive.getTime() > MAX_INACTIVE_TIME) {
+          if (!this.connections.has(socketId)) {
+            this.userSessions.delete(socketId);
+            staleConnectionsCleaned++;
+          }
+        }
+      }
+      
+      if (roomsCleaned > 0 || staleConnectionsCleaned > 0) {
+        logger.info(`General cleanup completed: ${roomsCleaned} inactive rooms, ${staleConnectionsCleaned} stale sessions`);
       }
     }, CLEANUP_INTERVAL);
+
+    logger.info('General cleanup interval initialized (1 hour interval)');
   }
   
   broadcastRoomState(roomId, event, data) {
@@ -110,7 +128,6 @@ class WebSocketService {
     }
   }
   
-
   getRoomState(accessCode) {
     const room = this.rooms.get(accessCode);
     return room ? room.currentState : null;
@@ -173,6 +190,7 @@ class WebSocketService {
       { event: 'sponsors_updated', data: { sponsors: room.sponsors } },
       { event: 'match_title_updated', data: { matchTitle: room.matchTitle } },
       { event: 'match_info_updated', data: { matchInfo: room.matchInfo } },
+      { event: 'live_unit_updated', data: { liveUnit: room.liveUnit}},
       // Timer events
       { event: 'timer_started', data: { initialTime: room.timer?.displayTime || '00:00' } },
       { event: 'timer_paused', data: { 
@@ -221,10 +239,6 @@ class WebSocketService {
    * Set up timer for a room if it doesn't exist
    */
   setupTimerForRoom(accessCode) {
-    if (!this.timerIntervals) {
-      this.timerIntervals = new Map();
-    }
-    
     // Only set up timer if not already set up for this room
     if (!this.timerIntervals.has(accessCode)) {
       const interval = setInterval(() => {
@@ -240,10 +254,55 @@ class WebSocketService {
    * Clean up timer for a room
    */
   cleanupTimerForRoom(accessCode) {
-    if (this.timerIntervals?.has(accessCode)) {
+    if (this.timerIntervals.has(accessCode)) {
       clearInterval(this.timerIntervals.get(accessCode));
       this.timerIntervals.delete(accessCode);
       logger.info(`Timer interval cleaned up for room ${accessCode}`);
+    }
+  }
+
+  /**
+   * Force expire a room manually (for admin purposes)
+   */
+  async forceExpireRoom(accessCode) {
+    try {
+      await handleRoomExpiration(this.io, accessCode, this.rooms);
+      this.cleanupTimerForRoom(accessCode);
+      logger.info(`Room ${accessCode} force expired`);
+      return true;
+    } catch (error) {
+      logger.error(`Error force expiring room ${accessCode}:`, error);
+      return false;
+    }
+  }
+
+  /**
+   * Get room expiration info
+   */
+  async getRoomExpirationInfo(accessCode) {
+    try {
+      const { RoomSession } = require('../models');
+      const roomSession = await RoomSession.findOne({
+        where: { accessCode }
+      });
+
+      if (!roomSession) {
+        return { exists: false };
+      }
+
+      const now = new Date();
+      const isExpired = roomSession.expiredAt && now > roomSession.expiredAt;
+
+      return {
+        exists: true,
+        expiredAt: roomSession.expiredAt,
+        isExpired,
+        status: roomSession.status,
+        timeUntilExpired: roomSession.expiredAt ? roomSession.expiredAt.getTime() - now.getTime() : null
+      };
+    } catch (error) {
+      logger.error(`Error getting room expiration info for ${accessCode}:`, error);
+      return { exists: false, error: error.message };
     }
   }
   
@@ -251,16 +310,58 @@ class WebSocketService {
    * Clean up all resources
    */
   cleanup() {
+    logger.info('Starting WebSocket service cleanup...');
+    
+    // Clear general cleanup interval
+    if (this.cleanupInterval) {
+      clearInterval(this.cleanupInterval);
+      this.cleanupInterval = null;
+      logger.info('General cleanup interval cleared');
+    }
+    
     // Clear all timer intervals
-    if (this.timerIntervals) {
-      this.timerIntervals.forEach((interval) => clearInterval(interval));
+    if (this.timerIntervals && this.timerIntervals.size > 0) {
+      this.timerIntervals.forEach((interval, accessCode) => {
+        clearInterval(interval);
+        logger.info(`Timer interval cleared for room: ${accessCode}`);
+      });
       this.timerIntervals.clear();
     }
     
-    // Clear all connections
+    // Clean up room timeouts (from optimized room management)
+    cleanupRoomTimeouts();
+    
+    // Disconnect all sockets gracefully
+    this.connections.forEach((socket, socketId) => {
+      try {
+        socket.disconnect(true);
+        logger.info(`Socket ${socketId} disconnected during cleanup`);
+      } catch (error) {
+        logger.error(`Error disconnecting socket ${socketId}:`, error);
+      }
+    });
+    
+    // Clear all data structures
     this.connections.clear();
     this.userSessions.clear();
     this.rooms.clear();
+    
+    logger.info('WebSocket service cleanup completed');
+  }
+
+  /**
+   * Get service health status
+   */
+  getHealthStatus() {
+    return {
+      connections: this.connections.size,
+      rooms: this.rooms.size,
+      userSessions: this.userSessions.size,
+      timerIntervals: this.timerIntervals.size,
+      uptime: process.uptime(),
+      memoryUsage: process.memoryUsage(),
+      timestamp: new Date().toISOString()
+    };
   }
 }
 

@@ -2,6 +2,12 @@ const logger = require('../utils/logger');
 const { sequelize, RoomSession, Match, AccessCode, DisplaySetting } = require('../models');
 const { Op } = require('sequelize');
 
+// Global interval - chỉ chạy 1 lần cho toàn bộ server
+let globalExpirationChecker = null;
+
+// Map để lưu timeout cho từng room
+const roomTimeouts = new Map();
+
 function createNewRoom(accessCode) {
   return {
     accessCode: accessCode,
@@ -206,7 +212,136 @@ function mergeRoomDataWithState(roomState, loadedData) {
   return roomState;
 }
 
+// Hàm tạo timeout riêng cho từng room
+function scheduleRoomExpiration(io, accessCode, expiredAt, rooms) {
+  // Clear timeout cũ nếu có
+  if (roomTimeouts.has(accessCode)) {
+    clearTimeout(roomTimeouts.get(accessCode));
+  }
+
+  const now = new Date();
+  const timeUntilExpired = expiredAt.getTime() - now.getTime();
+
+  if (timeUntilExpired <= 0) {
+    // Đã hết hạn rồi, xử lý ngay
+    handleRoomExpiration(io, accessCode, rooms);
+    return;
+  }
+
+  // Tạo timeout mới
+  const timeoutId = setTimeout(() => {
+    handleRoomExpiration(io, accessCode, rooms);
+    roomTimeouts.delete(accessCode);
+  }, timeUntilExpired);
+
+  roomTimeouts.set(accessCode, timeoutId);
+  logger.info(`Scheduled room expiration for ${accessCode} in ${Math.round(timeUntilExpired / 1000)} seconds`);
+}
+
+// Hàm xử lý khi room hết hạn
+async function handleRoomExpiration(io, accessCode, rooms) {
+  try {
+    logger.info(`Processing room expiration for: ${accessCode}`);
+    
+    // Cập nhật database
+    await Promise.all([
+      RoomSession.update(
+        { status: 'expired' },
+        { where: { accessCode } }
+      ),
+      AccessCode.update(
+        { status: 'expired' },
+        { where: { code: accessCode } }
+      )
+    ]);
+
+    // Thông báo tới tất cả clients trong room
+    io.to(`room_${accessCode}`).emit('room_expired', {
+      message: 'Phòng đã hết hạn sử dụng',
+      accessCode: accessCode
+    });
+
+    // Đóng tất cả socket connections trong room
+    const sockets = await io.in(`room_${accessCode}`).fetchSockets();
+    for (const socket of sockets) {
+      socket.leave(`room_${accessCode}`);
+      socket.disconnect(true);
+    }
+
+    // Xóa room khỏi memory
+    if (rooms.has(accessCode)) {
+      rooms.delete(accessCode);
+    }
+
+    // Xóa timeout
+    if (roomTimeouts.has(accessCode)) {
+      clearTimeout(roomTimeouts.get(accessCode));
+      roomTimeouts.delete(accessCode);
+    }
+
+    logger.info(`Room ${accessCode} expired and cleaned up successfully`);
+  } catch (error) {
+    logger.error(`Error handling room expiration for ${accessCode}:`, error);
+  }
+}
+
+// Khởi tạo global checker (chạy ít thường xuyên hơn để backup)
+function initializeGlobalExpirationChecker(io, rooms) {
+  if (globalExpirationChecker) {
+    clearInterval(globalExpirationChecker);
+  }
+
+  // Chỉ chạy 30 phút một lần để backup, vì đã có timeout riêng cho từng room
+  globalExpirationChecker = setInterval(async () => {
+    try {
+      const now = new Date();
+      const expiredSessions = await RoomSession.findAll({
+        where: {
+          expiredAt: { [Op.lt]: now },
+          status: 'active'
+        }
+      });
+
+      for (const session of expiredSessions) {
+        await handleRoomExpiration(io, session.accessCode, rooms);
+      }
+    } catch (error) {
+      logger.error('Error in global expiration checker:', error);
+    }
+  }, 30 * 60 * 1000); // 30 phút
+}
+
+// Hàm kiểm tra expiration khi có activity (lazy check)
+async function checkRoomExpirationOnActivity(accessCode) {
+  try {
+    const roomSession = await RoomSession.findOne({
+      where: { accessCode }
+    });
+
+    if (!roomSession || !roomSession.expiredAt) {
+      return { isExpired: false };
+    }
+
+    const now = new Date();
+    const isExpired = now > roomSession.expiredAt;
+
+    return { 
+      isExpired, 
+      expiredAt: roomSession.expiredAt,
+      roomSession 
+    };
+  } catch (error) {
+    logger.error('Error checking room expiration:', error);
+    return { isExpired: false };
+  }
+}
+
 function handleRoomManagement(io, socket, rooms, userSessions) {
+  // Khởi tạo global checker một lần duy nhất
+  if (!globalExpirationChecker) {
+    initializeGlobalExpirationChecker(io, rooms);
+  }
+
   socket.on('join_room', async (data) => {
     try {
       if (!data || typeof data !== 'object') {
@@ -231,11 +366,36 @@ function handleRoomManagement(io, socket, rooms, userSessions) {
         });
         return;
       }
+
+      // Kiểm tra AccessCode có expired không
+      const accessCodeData = await AccessCode.findOne({
+        where: { code: accessCode }
+      });
+
+      if (!accessCodeData || accessCodeData.status === 'expired') {
+        socket.emit('room_error', {
+          error: 'Mã truy cập đã hết hạn',
+          accessCode: accessCode
+        });
+        return;
+      }
+
+      // Lazy check expiration khi có activity
+      const expirationCheck = await checkRoomExpirationOnActivity(accessCode);
+      if (expirationCheck.isExpired) {
+        await handleRoomExpiration(io, accessCode, rooms);
+        socket.emit('room_error', {
+          error: 'Phòng đã hết hạn sử dụng',
+          accessCode: accessCode
+        });
+        return;
+      }
       
       const now = new Date();
       
-      let roomSession = await RoomSession.findOne({ where: { accessCode } });
+      let roomSession = expirationCheck.roomSession || await RoomSession.findOne({ where: { accessCode } });
       let isFirstTimeCreating = false;
+      let isFirstDisplayConnection = false;
       
       if (!roomSession) {
         isFirstTimeCreating = true;
@@ -245,9 +405,13 @@ function handleRoomManagement(io, socket, rooms, userSessions) {
         
         let expiredAt = null;
         if (clientType === 'display') {
+          isFirstDisplayConnection = true;
           expiredAt = new Date();
           expiredAt.setHours(expiredAt.getHours() + 2);
           logger.info(`First display connected, setting expiredAt to: ${expiredAt}`);
+          
+          // Tạo timeout cho room này
+          scheduleRoomExpiration(io, accessCode, expiredAt, rooms);
         }
         
         roomSession = await RoomSession.create({
@@ -260,6 +424,15 @@ function handleRoomManagement(io, socket, rooms, userSessions) {
         });
         
       } else {
+        // Kiểm tra RoomSession có expired không
+        if (roomSession.status === 'expired') {
+          socket.emit('room_error', {
+            error: 'Phòng đã hết hạn sử dụng',
+            accessCode: accessCode
+          });
+          return;
+        }
+
         const updateData = { lastActivityAt: now };
         
         if (clientType === 'admin' || clientType === 'client') {
@@ -270,16 +443,37 @@ function handleRoomManagement(io, socket, rooms, userSessions) {
           if (!roomSession.displayConnected.includes(socket.id)) {
             updateData.displayConnected = [...roomSession.displayConnected, socket.id];
             
+            // Kiểm tra nếu đây là lần đầu tiên có display kết nối
             if (roomSession.displayConnected.length === 0) {
+              isFirstDisplayConnection = true;
               const expiredAt = new Date();
               expiredAt.setHours(expiredAt.getHours() + 2);
               updateData.expiredAt = expiredAt;
-              logger.info(`First display connected, setting expiredAt to: ${expiredAt}`);
+              logger.info(`First display connected to existing room, setting expiredAt to: ${expiredAt}`);
+              
+              // Tạo timeout cho room này
+              scheduleRoomExpiration(io, accessCode, expiredAt, rooms);
+            } else if (roomSession.expiredAt) {
+              // Nếu đã có expiredAt, đảm bảo timeout được tạo
+              scheduleRoomExpiration(io, accessCode, roomSession.expiredAt, rooms);
             }
           }
         }
         
         await roomSession.update(updateData);
+      }
+
+      // Nếu là lần đầu tiên có display kết nối, cập nhật AccessCode status thành 'used'
+      if (isFirstDisplayConnection) {
+        await AccessCode.update(
+          { 
+            status: 'used',
+            lastUsedAt: now,
+            usageCount: sequelize.literal('usageCount + 1')
+          },
+          { where: { code: accessCode } }
+        );
+        logger.info(`AccessCode ${accessCode} marked as used due to first display connection`);
       }
       
       if (!rooms.has(accessCode)) {
@@ -321,7 +515,8 @@ function handleRoomManagement(io, socket, rooms, userSessions) {
         roomId: `room_${accessCode}`,
         currentState: room.currentState,
         clientCount: room.clients.size + room.adminClients.size,
-        isAdmin: clientType === 'admin'
+        isAdmin: clientType === 'admin',
+        expiredAt: roomSession.expiredAt
       };
       
       socket.emit('room_joined', response);
@@ -412,6 +607,13 @@ function handleRoomManagement(io, socket, rooms, userSessions) {
         try {
           await RoomSession.destroy({ where: { accessCode } });
           rooms.delete(accessCode);
+          
+          // Clear timeout khi room bị xóa
+          if (roomTimeouts.has(accessCode)) {
+            clearTimeout(roomTimeouts.get(accessCode));
+            roomTimeouts.delete(accessCode);
+          }
+          
           logger.info(`Room ${accessCode} removed (no clients)`);
         } catch (error) {
           logger.error('Error removing RoomSession:', error);
@@ -484,6 +686,13 @@ function handleRoomManagement(io, socket, rooms, userSessions) {
       if (room.clients.size === 0 && room.adminClients.size === 0 && room.displayClients.size === 0) {
         await RoomSession.destroy({ where: { accessCode } });
         rooms.delete(accessCode);
+        
+        // Clear timeout khi room bị xóa
+        if (roomTimeouts.has(accessCode)) {
+          clearTimeout(roomTimeouts.get(accessCode));
+          roomTimeouts.delete(accessCode);
+        }
+        
         logger.info(`Room ${accessCode} cleaned up (no more clients)`);
       }
       
@@ -512,4 +721,22 @@ function handleRoomManagement(io, socket, rooms, userSessions) {
   });
 }
 
-module.exports = { handleRoomManagement };
+// Cleanup function để clear tất cả timeouts khi server shutdown
+function cleanupRoomTimeouts() {
+  for (const [accessCode, timeoutId] of roomTimeouts.entries()) {
+    clearTimeout(timeoutId);
+    logger.info(`Cleared timeout for room: ${accessCode}`);
+  }
+  roomTimeouts.clear();
+  
+  if (globalExpirationChecker) {
+    clearInterval(globalExpirationChecker);
+    globalExpirationChecker = null;
+  }
+}
+
+module.exports = { 
+  handleRoomManagement, 
+  cleanupRoomTimeouts,
+  handleRoomExpiration 
+};

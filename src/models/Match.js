@@ -46,6 +46,12 @@ const Match = sequelize.define('Match', {
     allowNull: false,
     comment: 'Match start time',
   },
+  liveUnit: {
+    type: DataTypes.STRING(50),
+    allowNull: true,
+    defaultValue: null,
+    comment: 'Current live unit for the match',
+  },
   typeMatch: {
     type: DataTypes.ENUM('soccer', 'pickleball', 'other', 'futsal'),
     defaultValue: 'soccer',

@@ -96,6 +96,68 @@ async function updateMatchInDatabase(accessCode, updateData) {
 }
 
 function handleMatchData(io, socket, rooms, userSessions) {
+    // Xử lý cập nhật live unit
+    socket.on('live_unit_update', async (data) => {
+        try {
+            const { accessCode, liveUnit } = data;
+            
+            // Validate input
+            if (!accessCode) {
+                throw new Error('Mã truy cập không hợp lệ');
+            }
+
+            // Get room and validate
+            const room = rooms.get(accessCode);
+            if (!room) {
+                logger.error(`Room not found for access code: ${accessCode}`, { socketId: socket.id });
+                return socket.emit('live_unit_update_error', {
+                    error: 'Không tìm thấy phòng. Vui lòng thử lại sau khi tham gia phòng.',
+                    code: 'ROOM_NOT_FOUND',
+                    timestamp: Date.now()
+                });
+            }
+
+            // Verify admin permission
+            const userData = userSessions.get(socket.id);
+            if (!userData || !room.adminClients.has(socket.id)) {
+                return socket.emit('live_unit_update_error', {
+                    error: 'Bạn không có quyền cập nhật live unit',
+                    code: 'UNAUTHORIZED',
+                    timestamp: Date.now()
+                });
+            }
+
+            // Update in database
+            const result = await updateMatchInDatabase(accessCode, { liveUnit });
+            if (!result.success) {
+                throw new Error(result.error || 'Không thể cập nhật live unit');
+            }
+
+            // Update room state
+            room.currentState.liveUnit = liveUnit || null;
+            
+            // Broadcast to all clients in the room
+            io.to(`room_${accessCode}`).emit('live_unit_updated', {
+                liveUnit: room.currentState.liveUnit,
+                timestamp: Date.now()
+            });
+
+        } catch (error) {
+            logger.error(`Live unit update error: ${error.message}`, { 
+                error: error.toString(), 
+                stack: error.stack,
+                socketId: socket.id,
+                data: data
+            });
+            
+            socket.emit('live_unit_update_error', {
+                error: error.message || 'Đã xảy ra lỗi khi cập nhật live unit',
+                code: error.code || 'UPDATE_ERROR',
+                timestamp: Date.now()
+            });
+        }
+    });
+
     socket.on('match_title_update', async (data) => {
         console.log('Giá trị match_title_update là:', data);
         try {

@@ -25,6 +25,14 @@ router.get('/', matchController.getMatches);
  */
 router.get('/:id', matchController.getMatch);
 
+/**
+ * @route   GET /api/v1/matches/access-code/:code
+ * @desc    Lấy thông tin trận đấu bằng mã truy cập
+ * @access  Public
+ * @param   {string} code - Mã truy cập
+ */
+router.get('/access-code/:code', matchController.getMatchByAccessCode);
+
 // Các route yêu cầu xác thực
 router.use(protect);
 

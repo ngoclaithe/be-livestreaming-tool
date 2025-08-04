@@ -1,5 +1,6 @@
 const { Op } = require('sequelize');
 const Match = require('../models/Match');
+const AccessCode = require('../models/AccessCode');
 const ApiError = require('../utils/ApiError');
 const { StatusCodes } = require('http-status-codes');
 const logger = require('../utils/logger');
@@ -93,6 +94,45 @@ exports.updateMatch = async (req, res, next) => {
   }
 };
 
+// Get match by access code
+exports.getMatchByAccessCode = async (req, res, next) => {
+  try {
+    const { code } = req.params;
+    
+    // Find the access code
+    const accessCode = await AccessCode.findOne({
+      where: { 
+        code,
+        status: 'active',
+        [Op.or]: [
+          { expiresAt: null },
+          { expiresAt: { [Op.gt]: new Date() } }
+        ]
+      },
+      include: [
+        {
+          model: Match,
+          as: 'match',
+          required: true
+        }
+      ]
+    });
+
+    if (!accessCode) {
+      return next(new ApiError('Mã truy cập không hợp lệ hoặc đã hết hạn', StatusCodes.NOT_FOUND));
+    }
+
+    // If we found a valid access code and match, return the match data
+    res.status(StatusCodes.OK).json({ 
+      success: true, 
+      data: accessCode.match 
+    });
+  } catch (error) {
+    logger.error(`Get match by access code error: ${error.message}`);
+    next(error);
+  }
+};
+
 // Delete match
 exports.deleteMatch = async (req, res, next) => {
   try {
@@ -106,6 +146,37 @@ exports.deleteMatch = async (req, res, next) => {
     res.status(StatusCodes.OK).json({ success: true, message: 'Đã xóa trận đấu thành công' });
   } catch (error) {
     logger.error(`Delete match error: ${error.message}`);
+    next(error);
+  }
+};
+
+// Update live unit for match
+exports.updateLiveUnit = async (req, res, next) => {
+  try {
+    const { matchId } = req.params;
+    const { liveUnit } = req.body;
+    
+    const match = await Match.findByPk(matchId);
+    if (!match) {
+      return next(new ApiError('Không tìm thấy trận đấu', StatusCodes.NOT_FOUND));
+    }
+    
+    // Kiểm tra quyền truy cập
+    if (match.userId !== req.user.id && req.user.role !== 'admin') {
+      return next(new ApiError('Không có quyền cập nhật trận đấu này', StatusCodes.FORBIDDEN));
+    }
+    
+    // Cập nhật liveUnit
+    match.liveUnit = liveUnit || null;
+    await match.save();
+    
+    // Trả về dữ liệu đã cập nhật
+    res.status(StatusCodes.OK).json({ 
+      success: true, 
+      data: { liveUnit: match.liveUnit } 
+    });
+  } catch (error) {
+    logger.error(`Update live unit error: ${error.message}`);
     next(error);
   }
 };
