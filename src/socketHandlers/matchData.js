@@ -3,15 +3,39 @@ const { Match } = require('../models');
 
 const { AccessCode } = require('../models');
 
-/**
- * Cập nhật thông tin trận đấu vào cơ sở dữ liệu
- * @param {string} accessCode - Mã truy cập phòng
- * @param {object} updateData - Dữ liệu cần cập nhật
- * @returns {Promise<boolean>} - Trả về true nếu cập nhật thành công, ngược lại trả về false
- */
+function cleanLogoUrl(logoUrl) {
+    if (!logoUrl || typeof logoUrl !== 'string') {
+        return logoUrl;
+    }
+
+    const patterns = [
+        /^https?:\/\/[^\/]+\/api\/v1(\/.+)$/,  // Matches http://... or https://... with any domain/IP
+    ];
+
+    for (const pattern of patterns) {
+        const match = logoUrl.match(pattern);
+        if (match) {
+            return `/api/v1${match[1]}`;
+        }
+    }
+
+    return logoUrl;
+}
+
 async function updateMatchInDatabase(accessCode, updateData) {
     try {
-        // Find access code to get matchId
+        const cleanedUpdateData = { ...updateData };
+        
+        if (cleanedUpdateData.teamALogo) {
+            cleanedUpdateData.teamALogo = cleanLogoUrl(cleanedUpdateData.teamALogo);
+            logger.info(`Cleaned teamALogo: ${updateData.teamALogo} -> ${cleanedUpdateData.teamALogo}`);
+        }
+        
+        if (cleanedUpdateData.teamBLogo) {
+            cleanedUpdateData.teamBLogo = cleanLogoUrl(cleanedUpdateData.teamBLogo);
+            logger.info(`Cleaned teamBLogo: ${updateData.teamBLogo} -> ${cleanedUpdateData.teamBLogo}`);
+        }
+
         const accessCodeRecord = await AccessCode.findOne({
             where: { code: accessCode },
             attributes: ['matchId'],
@@ -32,7 +56,6 @@ async function updateMatchInDatabase(accessCode, updateData) {
             return { success: false, error: 'Mã truy cập chưa được liên kết với trận đấu nào' };
         }
 
-        // Check if match exists
         if (!accessCodeRecord.match) {
             logger.error(`Match not found with ID: ${accessCodeRecord.matchId} referenced by access code: ${accessCode}`);
             return { 
@@ -42,8 +65,7 @@ async function updateMatchInDatabase(accessCode, updateData) {
             };
         }
 
-        // Update match information
-        const [updated] = await Match.update(updateData, {
+        const [updated] = await Match.update(cleanedUpdateData, {
             where: { id: accessCodeRecord.matchId }
         });
 
@@ -73,11 +95,7 @@ async function updateMatchInDatabase(accessCode, updateData) {
     }
 }
 
-/**
- * Handles all match-related socket events
- */
 function handleMatchData(io, socket, rooms, userSessions) {
-    // Match title update handler
     socket.on('match_title_update', async (data) => {
         console.log('Giá trị match_title_update là:', data);
         try {

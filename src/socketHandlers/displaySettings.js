@@ -114,6 +114,7 @@ function handleDisplaySettings(io, socket, rooms, userSessions) {
         displaySettings: room.currentState.displaySettings,
         timestamp: timestamp
       });
+      console.log("✅ Đã cập nhật và gửi lại dữ liệu display settings", displaySettings);
       
     } catch (error) {
       console.error('❌ Error in display_settings_update:', error.message);
@@ -165,16 +166,14 @@ function handleDisplaySettings(io, socket, rooms, userSessions) {
       });
       
       room.lastActivity = timestamp;
-      // Xử lý dựa trên behavior
       if (behavior === 'remove') {
-        // Xóa khỏi database
         
         try {
           await DisplaySetting.destroy({
             where: {
               accessCode,
               type: 'sponsors',
-              code_logo: sponsors.code_logo?.[0] // Giả sử chỉ xóa một mục mỗi lần
+              code_logo: sponsors.code_logo?.[0] 
             }
           });
         } catch (error) {

@@ -1,12 +1,7 @@
 const logger = require('../utils/logger');
-const { sequelize, RoomSession } = require('../models');
+const { sequelize, RoomSession, Match, AccessCode, DisplaySetting } = require('../models');
 const { Op } = require('sequelize');
 
-/**
- * Creates a new room with default values
- * @param {string} accessCode - The access code for the room
- * @returns {Object} The newly created room object
- */
 function createNewRoom(accessCode) {
   return {
     accessCode: accessCode,
@@ -67,13 +62,148 @@ function createNewRoom(accessCode) {
   };
 }
 
-/**
- * Validates an access code (placeholder - implement actual validation)
- * @param {string} accessCode - The access code to validate
- * @returns {Promise<boolean>} True if valid, false otherwise
- */
 async function validateAccessCode(accessCode) {
   return accessCode && typeof accessCode === 'string' && accessCode.trim().length > 0;
+}
+
+async function loadRoomData(accessCode) {
+  try {
+    const accessCodeData = await AccessCode.findOne({
+      where: { code: accessCode },
+      include: [
+        {
+          model: Match,
+          as: 'match',
+          required: false
+        }
+      ]
+    });
+
+    const displaySettings = await DisplaySetting.findAll({
+      where: { accessCode: accessCode }
+    });
+
+    const roomData = {
+      match: null,
+      displaySettings: displaySettings || []
+    };
+
+    if (accessCodeData && accessCodeData.match) {
+      const match = accessCodeData.match;
+      roomData.match = {
+        id: match.id,
+        homeTeam: {
+          name: match.teamAName,
+          score: match.homeScore,
+          logo: match.teamALogo,
+          kitColor: match.teamAkitcolor,
+          kit2Color: match.teamA2kitcolor
+        },
+        awayTeam: {
+          name: match.teamBName,
+          score: match.awayScore,
+          logo: match.teamBLogo,
+          kitColor: match.teamBkitcolor,
+          kit2Color: match.teamB2kitcolor
+        },
+        tournament: match.tournamentName || "",
+        tournamentLogo: match.tournamentLogo,
+        stadium: match.venue || match.location || "",
+        matchDate: match.matchDate,
+        status: match.status,
+        typeMatch: match.typeMatch,
+        matchTitle: match.match_title,
+        referee: match.referee,
+        attendance: match.attendance,
+        liveUnit: match.live_unit,
+        stats: {
+          possession: match.possession || { home: 50, away: 50 },
+          shots: match.shots || { home: 0, away: 0 },
+          shotsOnTarget: match.shotsOnTarget || { home: 0, away: 0 },
+          corners: match.corners || { home: 0, away: 0 },
+          fouls: match.fouls || { home: 0, away: 0 },
+          offsides: match.offsides || { home: 0, away: 0 },
+          yellowCards: match.yellowCards || { home: 0, away: 0 },
+          redCards: match.redCards || { home: 0, away: 0 }
+        },
+        metadata: match.metadata
+      };
+    }
+
+    return roomData;
+  } catch (error) {
+    logger.error('Error loading room data:', error);
+    return { match: null, displaySettings: [] };
+  }
+}
+
+function mergeRoomDataWithState(roomState, loadedData) {
+  if (loadedData.match) {
+    const match = loadedData.match;
+    
+    roomState.currentState.matchData = {
+      homeTeam: {
+        name: match.homeTeam.name,
+        score: match.homeTeam.score,
+        logo: match.homeTeam.logo
+      },
+      awayTeam: {
+        name: match.awayTeam.name,
+        score: match.awayTeam.score,
+        logo: match.awayTeam.logo
+      },
+      matchTime: roomState.currentState.matchData.matchTime,
+      period: roomState.currentState.matchData.period,
+      status: match.status === 'live' ? 'live' : roomState.currentState.matchData.status,
+      tournament: match.tournament,
+      stadium: match.stadium,
+      matchDate: match.matchDate ? new Date(match.matchDate).toLocaleDateString() : "",
+      liveText: roomState.currentState.matchData.liveText
+    };
+
+    if (match.stats) {
+      roomState.currentState.matchStats = {
+        possession: {
+          team1: match.stats.possession.home || 50,
+          team2: match.stats.possession.away || 50
+        },
+        totalShots: {
+          team1: match.stats.shots.home || 0,
+          team2: match.stats.shots.away || 0
+        },
+        shotsOnTarget: {
+          team1: match.stats.shotsOnTarget.home || 0,
+          team2: match.stats.shotsOnTarget.away || 0
+        },
+        corners: {
+          team1: match.stats.corners.home || 0,
+          team2: match.stats.corners.away || 0
+        },
+        yellowCards: {
+          team1: match.stats.yellowCards.home || 0,
+          team2: match.stats.yellowCards.away || 0
+        },
+        fouls: {
+          team1: match.stats.fouls.home || 0,
+          team2: match.stats.fouls.away || 0
+        }
+      };
+    }
+  }
+
+  if (loadedData.displaySettings && loadedData.displaySettings.length > 0) {
+    roomState.currentState.displaySettings.logos = loadedData.displaySettings.map(setting => ({
+      id: setting.id,
+      type: setting.type,
+      codelogo: setting.code_logo,
+      typeDisplay: setting.type_display,
+      position: setting.position,
+      urlLogo: setting.url_logo,
+      metadata: setting.metadata
+    }));
+  }
+
+  return roomState;
 }
 
 function handleRoomManagement(io, socket, rooms, userSessions) {
@@ -105,8 +235,11 @@ function handleRoomManagement(io, socket, rooms, userSessions) {
       const now = new Date();
       
       let roomSession = await RoomSession.findOne({ where: { accessCode } });
+      let isFirstTimeCreating = false;
       
       if (!roomSession) {
+        isFirstTimeCreating = true;
+        
         const initialClientConnected = (clientType === 'admin' || clientType === 'client') ? [socket.id] : [];
         const initialDisplayConnected = (clientType === 'display') ? [socket.id] : [];
         
@@ -125,6 +258,7 @@ function handleRoomManagement(io, socket, rooms, userSessions) {
           displayConnected: initialDisplayConnected,
           lastActivityAt: now
         });
+        
       } else {
         const updateData = { lastActivityAt: now };
         
@@ -149,7 +283,10 @@ function handleRoomManagement(io, socket, rooms, userSessions) {
       }
       
       if (!rooms.has(accessCode)) {
-        rooms.set(accessCode, createNewRoom(accessCode));
+        const newRoom = createNewRoom(accessCode);
+        const loadedData = await loadRoomData(accessCode);
+        const mergedRoom = mergeRoomDataWithState(newRoom, loadedData);
+        rooms.set(accessCode, mergedRoom);
       }
       
       const room = rooms.get(accessCode);
@@ -179,30 +316,37 @@ function handleRoomManagement(io, socket, rooms, userSessions) {
       
       logger.info(`Client joined room ${accessCode}`, { socketId: socket.id });
       
-      socket.emit('room_joined', {
+      const response = {
         accessCode: accessCode,
         roomId: `room_${accessCode}`,
         currentState: room.currentState,
         clientCount: room.clients.size + room.adminClients.size,
         isAdmin: clientType === 'admin'
-      });
+      };
+      
+      socket.emit('room_joined', response);
       
       if (room.clients.size + room.adminClients.size > 1) { 
-        socket.to(`room_${accessCode}`).emit('client_joined', {
+        const clientJoinedData = {
           clientId: socket.id,
           clientType: clientType,
           clientCount: room.clients.size + room.adminClients.size
-        });
+        };
+        
+        socket.to(`room_${accessCode}`).emit('client_joined', clientJoinedData);
       }
       
       logger.info(`Client ${socket.id} joined room ${accessCode} as ${clientType}. Total clients: ${room.clients.size + room.adminClients.size}`);
       
     } catch (error) {
       logger.error('Error in join_room:', error);
-      socket.emit('room_error', {
+      
+      const errorResponse = {
         error: 'Lỗi khi tham gia phòng',
         details: error.message
-      });
+      };
+      
+      socket.emit('room_error', errorResponse);
     }
   });
   
@@ -349,10 +493,12 @@ function handleRoomManagement(io, socket, rooms, userSessions) {
         userData.clientType = null;
       }
       
-      socket.emit('room_left', {
+      const leaveResponse = {
         accessCode: accessCode,
         message: 'Đã rời phòng thành công'
-      });
+      };
+      
+      socket.emit('room_left', leaveResponse);
       
       logger.info(`Client ${socket.id} left room ${accessCode}. Remaining clients: ${room.clients.size + room.adminClients.size}`);
       
