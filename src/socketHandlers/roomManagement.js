@@ -2,10 +2,8 @@ const logger = require('../utils/logger');
 const { sequelize, RoomSession, Match, AccessCode, DisplaySetting } = require('../models');
 const { Op } = require('sequelize');
 
-// Global interval - chỉ chạy 1 lần cho toàn bộ server
 let globalExpirationChecker = null;
 
-// Map để lưu timeout cho từng room
 const roomTimeouts = new Map();
 
 function createNewRoom(accessCode) {
@@ -26,8 +24,8 @@ function createNewRoom(accessCode) {
     currentState: {
       view: 'poster',
       matchData: {
-        homeTeam: { name: "ĐỘI A", score: 0, logo: null },
-        awayTeam: { name: "ĐỘI B", score: 0, logo: null },
+        teamA: { name: "ĐỘI A", score: 0, logo: null },
+        teamB: { name: "ĐỘI B", score: 0, logo: null },
         matchTime: "00:00",
         period: "Chưa bắt đầu",
         status: "waiting",
@@ -98,14 +96,14 @@ async function loadRoomData(accessCode) {
       const match = accessCodeData.match;
       roomData.match = {
         id: match.id,
-        homeTeam: {
+        teamA: {
           name: match.teamAName,
           score: match.homeScore,
           logo: match.teamALogo,
           kitColor: match.teamAkitcolor,
           kit2Color: match.teamA2kitcolor
         },
-        awayTeam: {
+        teamB: {
           name: match.teamBName,
           score: match.awayScore,
           logo: match.teamBLogo,
@@ -148,15 +146,15 @@ function mergeRoomDataWithState(roomState, loadedData) {
     const match = loadedData.match;
     
     roomState.currentState.matchData = {
-      homeTeam: {
-        name: match.homeTeam.name,
-        score: match.homeTeam.score,
-        logo: match.homeTeam.logo
+      teamA: {
+        name: match.teamA.name,
+        score: match.teamA.score,
+        logo: match.teamA.logo
       },
-      awayTeam: {
-        name: match.awayTeam.name,
-        score: match.awayTeam.score,
-        logo: match.awayTeam.logo
+      teamB: {
+        name: match.teamB.name,
+        score: match.teamB.score,
+        logo: match.teamB.logo
       },
       matchTime: roomState.currentState.matchData.matchTime,
       period: roomState.currentState.matchData.period,
