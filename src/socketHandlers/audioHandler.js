@@ -1,10 +1,7 @@
 const logger = require('../utils/logger');
 
-/**
- * Handles all audio-related socket events
- */
+
 function handleAudioUpdates(io, socket, rooms, userSessions) {
-  // Audio control broadcast event
   socket.on('audio_control_broadcast', (data) => {
     try {
       if (!data || typeof data !== 'object') {
@@ -20,7 +17,6 @@ function handleAudioUpdates(io, socket, rooms, userSessions) {
         timestamp = Date.now() 
       } = data;
       
-      // Validate input
       if (!accessCode || typeof accessCode !== 'string' || accessCode.trim() === '') {
         throw new Error('Mã truy cập không hợp lệ');
       }
@@ -29,7 +25,6 @@ function handleAudioUpdates(io, socket, rooms, userSessions) {
         throw new Error('Lệnh điều khiển âm thanh không hợp lệ');
       }
       
-      // Get room and validate
       const room = rooms.get(accessCode);
       if (!room) {
         logger.error(`Room not found for access code: ${accessCode}`, { socketId: socket.id });
@@ -40,7 +35,6 @@ function handleAudioUpdates(io, socket, rooms, userSessions) {
         });
       }
       
-      // Verify admin permission
       const userData = userSessions.get(socket.id);
       if (!userData || !room.adminClients.has(socket.id)) {
         return socket.emit('audio_control_error', {
@@ -56,23 +50,19 @@ function handleAudioUpdates(io, socket, rooms, userSessions) {
         timestamp: timestamp
       });
       
-      // Validate command types
       const validCommands = ['PLAY_REFEREE_VOICE', 'STOP_AUDIO', 'PAUSE_AUDIO', 'RESUME_AUDIO'];
       if (!validCommands.includes(command)) {
         throw new Error(`Lệnh không được hỗ trợ: ${command}`);
       }
       
-      // Additional validation for PLAY_REFEREE_VOICE
       if (command === 'PLAY_REFEREE_VOICE') {
         if (!payload.audioData || !payload.mimeType) {
           throw new Error('Thiếu dữ liệu âm thanh hoặc mimeType');
         }
       }
       
-      // Update room activity
       room.lastActivity = timestamp;
       
-      // Build control message
       const controlMessage = {
         command,
         payload,
@@ -82,19 +72,15 @@ function handleAudioUpdates(io, socket, rooms, userSessions) {
         from: socket.id
       };
       
-      // Send to specific target based on target parameter
       if (target === 'all') {
-        // Send to all clients in the room
         io.to(`room_${accessCode}`).emit('audio_control', controlMessage);
       } else if (['client', 'admin', 'display'].includes(target)) {
-        // Send to specific client type in the room
         console.log('Vừa gửi xong nèeee');
         io.to(`room_${accessCode}`).emit('audio_control', {
           ...controlMessage,
           target: target
         });
       } else {
-        // Send to specific client by ID
         io.to(target).emit('audio_control', controlMessage);
       }
       
@@ -110,7 +96,6 @@ function handleAudioUpdates(io, socket, rooms, userSessions) {
     }
   });
   
-  // Audio control event (for direct control)
   socket.on('audio_control', (data) => {
     try {
       if (!data || typeof data !== 'object') {
@@ -125,7 +110,6 @@ function handleAudioUpdates(io, socket, rooms, userSessions) {
         timestamp = Date.now() 
       } = data;
       
-      // Validate input
       if (!accessCode || typeof accessCode !== 'string' || accessCode.trim() === '') {
         throw new Error('Mã truy cập không hợp lệ');
       }
@@ -134,7 +118,6 @@ function handleAudioUpdates(io, socket, rooms, userSessions) {
         throw new Error('Lệnh điều khiển âm thanh không hợp lệ');
       }
       
-      // Get room and validate
       const room = rooms.get(accessCode);
       if (!room) {
         logger.error(`Room not found for access code: ${accessCode}`, { socketId: socket.id });
@@ -145,7 +128,6 @@ function handleAudioUpdates(io, socket, rooms, userSessions) {
         });
       }
       
-      // Verify admin permission
       const userData = userSessions.get(socket.id);
       if (!userData || !room.adminClients.has(socket.id)) {
         return socket.emit('audio_control_error', {
@@ -160,23 +142,19 @@ function handleAudioUpdates(io, socket, rooms, userSessions) {
         timestamp: timestamp
       });
       
-      // Validate command types
       const validCommands = ['PLAY_REFEREE_VOICE', 'STOP_AUDIO', 'PAUSE_AUDIO', 'RESUME_AUDIO'];
       if (!validCommands.includes(command)) {
         throw new Error(`Lệnh không được hỗ trợ: ${command}`);
       }
       
-      // Additional validation for PLAY_REFEREE_VOICE
       if (command === 'PLAY_REFEREE_VOICE') {
         if (!payload.audioData || !payload.mimeType) {
           throw new Error('Thiếu dữ liệu âm thanh hoặc mimeType');
         }
       }
       
-      // Update room activity
       room.lastActivity = timestamp;
       
-      // Build control message
       const controlMessage = {
         command,
         payload,
@@ -186,10 +164,8 @@ function handleAudioUpdates(io, socket, rooms, userSessions) {
         from: socket.id
       };
       
-      // Broadcast to all clients in the room EXCEPT the sender
       socket.to(`room_${accessCode}`).emit('audio_control_received', controlMessage);
       
-      // Also send confirmation to the sender
       socket.emit('audio_control_received', controlMessage);
       
       logger.info(`Audio control executed: ${command} in room ${accessCode}`);

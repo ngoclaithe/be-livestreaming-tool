@@ -1,6 +1,25 @@
 const logger = require('../utils/logger');
 const { DisplaySetting } = require('../models');
 
+function cleanLogoUrl(logoUrl) {
+    if (!logoUrl || typeof logoUrl !== 'string') {
+        return logoUrl;
+    }
+
+    const patterns = [
+        /^https?:\/\/[^\/]+\/api\/v1(\/.+)$/,  // Matches http://... or https://... with any domain/IP
+    ];
+
+    for (const pattern of patterns) {
+        const match = logoUrl.match(pattern);
+        if (match) {
+            return `/api/v1${match[1]}`;
+        }
+    }
+
+    return logoUrl;
+}
+
 async function updateDisplaySettings(accessCode, type, items) {
   try {
     const displaySettings = [];
@@ -18,21 +37,7 @@ async function updateDisplaySettings(accessCode, type, items) {
 
     for (let i = 0; i < maxLength; i++) {
       if (codeLogos[i] && urlLogos[i] && positions[i]) {
-        let processedUrlLogo = urlLogos[i];
-        const prefixes = [
-          'http://localhost:5000/api/v1',
-          'https://scoliv2.com/api/v1',
-          'http://192.168.31.186:5000/api/v1'
-        ];
-        
-        if (processedUrlLogo && typeof processedUrlLogo === 'string') {
-          for (const prefix of prefixes) {
-            if (processedUrlLogo.startsWith(prefix)) {
-              processedUrlLogo = processedUrlLogo.substring(prefix.length);
-              break;
-            }
-          }
-        }
+        const processedUrlLogo = cleanLogoUrl(urlLogos[i]);
 
         const existingRecord = await DisplaySetting.findOne({
           where: {
@@ -47,7 +52,7 @@ async function updateDisplaySettings(accessCode, type, items) {
             type: type,
             code_logo: codeLogos[i],
             position: positions[i],
-            url_logo: processedUrlLogo, 
+            url_logo: processedUrlLogo,
             type_display: typeDisplays[i] || 'default',
             accessCode: accessCode
           });

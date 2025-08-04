@@ -102,13 +102,18 @@ class WebSocketService {
       
       // Cleanup stale user sessions
       for (const [socketId, session] of this.userSessions.entries()) {
-        if (now - session.lastActive.getTime() > MAX_INACTIVE_TIME) {
+        const lastActive = session?.lastActive;
+        if (
+          lastActive instanceof Date &&
+          now - lastActive.getTime() > MAX_INACTIVE_TIME
+        ) {
           if (!this.connections.has(socketId)) {
             this.userSessions.delete(socketId);
             staleConnectionsCleaned++;
           }
         }
       }
+
       
       if (roomsCleaned > 0 || staleConnectionsCleaned > 0) {
         logger.info(`General cleanup completed: ${roomsCleaned} inactive rooms, ${staleConnectionsCleaned} stale sessions`);

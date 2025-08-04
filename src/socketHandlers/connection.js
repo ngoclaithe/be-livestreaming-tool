@@ -1,12 +1,9 @@
 const logger = require('../utils/logger');
 
-/**
- * Handles socket connection and disconnection events
- */
+
 function handleConnection(io, socket, rooms, userSessions) {
   logger.info(`New client connected: ${socket.id}`);
   
-  // Store basic user session
   userSessions.set(socket.id, {
     socketId: socket.id,
     connectedAt: Date.now(),
@@ -15,11 +12,9 @@ function handleConnection(io, socket, rooms, userSessions) {
     clientType: null // 'admin', 'display', or 'client'
   });
 
-  // Handle disconnection
   socket.on('disconnect', () => {
     logger.info(`Client disconnected: ${socket.id}`);
     
-    // Cleanup user session
     const userData = userSessions.get(socket.id);
     if (userData && userData.accessCode) {
       const room = rooms.get(userData.accessCode);
