@@ -550,65 +550,64 @@ function handleDisplaySettings(io, socket, rooms, userSessions) {
   });
 
   // Live unit update
-  socket.on('live_unit_update', (data) => {
-    // console.log('📨 Received live_unit_update:', data);
+  // socket.on('live_unit_update', (data) => {
     
-    try {
-      const { accessCode, live_unit, timestamp = Date.now() } = data;     
-      if (!accessCode || !live_unit) {
-        throw new Error('Access code and live_unit data are required');
-      }
+  //   try {
+  //     const { accessCode, live_unit, timestamp = Date.now() } = data;     
+  //     if (!accessCode || !live_unit) {
+  //       throw new Error('Access code and live_unit data are required');
+  //     }
       
-      const room = rooms.get(accessCode);
+  //     const room = rooms.get(accessCode);
       
-      if (!room) {
-        throw new Error('Room not found');
-      }
+  //     if (!room) {
+  //       throw new Error('Room not found');
+  //     }
       
-      const userData = userSessions.get(socket.id);
-      const isAdmin = userData && room.adminClients.has(socket.id);
+  //     const userData = userSessions.get(socket.id);
+  //     const isAdmin = userData && room.adminClients.has(socket.id);
       
-      if (!userData || !room.adminClients.has(socket.id)) {
-        throw new Error('Unauthorized: Only admin can update live_unit');
-      }
+  //     if (!userData || !room.adminClients.has(socket.id)) {
+  //       throw new Error('Unauthorized: Only admin can update live_unit');
+  //     }
       
-      if (!room.currentState.live_unit) {
-        room.currentState.live_unit = {
-          code_logo: [],
-          url_logo: [],
-          position: [],
-          type_display: []
-        };
-      }
+  //     if (!room.currentState.live_unit) {
+  //       room.currentState.live_unit = {
+  //         code_logo: [],
+  //         url_logo: [],
+  //         position: [],
+  //         type_display: []
+  //       };
+  //     }
       
-      if (live_unit.code_logo !== undefined) {
-        room.currentState.live_unit.code_logo = live_unit.code_logo || [];
-      }
-      if (live_unit.url_logo !== undefined) {
-        room.currentState.live_unit.url_logo = live_unit.url_logo || [];
-      }
-      if (live_unit.position !== undefined) {
-        room.currentState.live_unit.position = live_unit.position || [];
-      }
-      if (live_unit.type_display !== undefined) {
-        room.currentState.live_unit.type_display = live_unit.type_display || [];
-      }
+  //     if (live_unit.code_logo !== undefined) {
+  //       room.currentState.live_unit.code_logo = live_unit.code_logo || [];
+  //     }
+  //     if (live_unit.url_logo !== undefined) {
+  //       room.currentState.live_unit.url_logo = live_unit.url_logo || [];
+  //     }
+  //     if (live_unit.position !== undefined) {
+  //       room.currentState.live_unit.position = live_unit.position || [];
+  //     }
+  //     if (live_unit.type_display !== undefined) {
+  //       room.currentState.live_unit.type_display = live_unit.type_display || [];
+  //     }
       
-      room.lastActivity = timestamp;
+  //     room.lastActivity = timestamp;
       
-      // Broadcast to all clients in the room
-      io.to(`room_${accessCode}`).emit('live_unit_updated', {
-        live_unit: room.currentState.live_unit,
-        timestamp: timestamp
-      });
+  //     // Broadcast to all clients in the room
+  //     io.to(`room_${accessCode}`).emit('live_unit_updated', {
+  //       live_unit: room.currentState.live_unit,
+  //       timestamp: timestamp
+  //     });
       
-      // console.log('📤 Broadcasted to room:', accessCode);
+  //     // console.log('📤 Broadcasted to room:', accessCode);
       
       
-    } catch (error) {
-      console.error('❌ Error in live_unit_update:', error.message);
-    }
-  });
+  //   } catch (error) {
+  //     console.error('❌ Error in live_unit_update:', error.message);
+  //   }
+  // });
 
   // General match info update (tournament, stadium, etc.)
   socket.on('match_info_update', (data) => {

@@ -128,17 +128,17 @@ function handleMatchData(io, socket, rooms, userSessions) {
             }
 
             // Update in database
-            const result = await updateMatchInDatabase(accessCode, { liveUnit });
+            const result = await updateMatchInDatabase(accessCode, { liveUnit: liveUnit.text });
             if (!result.success) {
                 throw new Error(result.error || 'Không thể cập nhật live unit');
             }
 
             // Update room state
-            room.currentState.liveUnit = liveUnit || null;
+            room.currentState.matchData.liveText = liveUnit.text || null;
             
             // Broadcast to all clients in the room
             io.to(`room_${accessCode}`).emit('live_unit_updated', {
-                liveUnit: room.currentState.liveUnit,
+                liveText: room.currentState.matchData.liveText,
                 timestamp: Date.now()
             });
 
