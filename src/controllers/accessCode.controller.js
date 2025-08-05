@@ -547,17 +547,23 @@ exports.verifyAccessCode = async (req, res, next) => {
       });
     }
 
-    // Kiểm tra trạng thái
-    if (accessCode.status !== 'active') {
+    // Kiểm tra các trạng thái KHÔNG được phép truy cập
+    const statusMessages = {
+      'inactive': 'Mã truy cập chưa được kích hoạt. Vui lòng nạp tiền để sử dụng',
+      'expired': 'Mã truy cập đã hết hạn',
+      'revoked': 'Mã truy cập đã bị thu hồi'
+    };
+
+    if (['inactive', 'expired', 'revoked'].includes(accessCode.status)) {
       return res.status(StatusCodes.BAD_REQUEST).json({
         success: false,
-        message: `Mã truy cập đã bị ${accessCode.status === 'used' ? 'sử dụng' : accessCode.status === 'expired' ? 'hết hạn' : 'hủy'}`,
+        message: statusMessages[accessCode.status],
         isValid: false,
         status: accessCode.status
       });
     }
 
-    // Kiểm tra thời hạn
+    // Kiểm tra thời hạn cho cả 'active' và 'used'
     if (accessCode.expiresAt && new Date(accessCode.expiresAt) < new Date()) {
       // Cập nhật trạng thái nếu đã hết hạn
       await accessCode.update({ status: 'expired' });
@@ -570,29 +576,80 @@ exports.verifyAccessCode = async (req, res, next) => {
       });
     }
 
-    // Kiểm tra số lần sử dụng
+    // Kiểm tra số lần sử dụng - CHỈ WARNING, không block
+    let warningMessage = null;
     if (accessCode.maxUses > 0 && accessCode.usedCount >= accessCode.maxUses) {
-      await accessCode.update({ status: 'used' });
-      
-      return res.status(StatusCodes.BAD_REQUEST).json({
-        success: false,
-        message: 'Mã truy cập đã đạt giới hạn sử dụng',
-        isValid: false,
-        status: 'used'
-      });
+      warningMessage = 'Mã truy cập đã đạt giới hạn sử dụng nhưng vẫn có thể truy cập';
     }
 
-    // Nếu tất cả đều hợp lệ
-    res.status(StatusCodes.OK).json({
-      success: true,
-      message: 'Mã truy cập hợp lệ',
-      isValid: true,
-      data: {
-        code: accessCode.code,
-        status: accessCode.status,
-        expiresAt: accessCode.expiresAt,
-        match: accessCode.match
+    // CHỈ cho phép 'active' và 'used' truy cập
+    if (accessCode.status === 'active' || accessCode.status === 'used') {
+      
+      // Tính toán thời gian còn lại
+      let timeRemaining = null;
+      let timeRemainingMessage = null;
+      
+      if (accessCode.expiresAt) {
+        const now = new Date();
+        const expiresAt = new Date(accessCode.expiresAt);
+        const diffMs = expiresAt.getTime() - now.getTime();
+        
+        if (diffMs > 0) {
+          const days = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+          const hours = Math.floor((diffMs % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+          const minutes = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
+          
+          if (days > 0) {
+            timeRemainingMessage = `${days} ngày ${hours} giờ`;
+          } else if (hours > 0) {
+            timeRemainingMessage = `${hours} giờ ${minutes} phút`;
+          } else {
+            timeRemainingMessage = `${minutes} phút`;
+          }
+          
+          timeRemaining = {
+            days,
+            hours,
+            minutes,
+            totalMinutes: Math.floor(diffMs / (1000 * 60))
+          };
+        }
       }
+
+      const responseData = {
+        success: true,
+        message: accessCode.status === 'active' 
+          ? 'Mã truy cập hợp lệ - Phòng mới (30 ngày)' 
+          : 'Mã truy cập hợp lệ - Phòng đang hoạt động (2 tiếng)',
+        isValid: true,
+        data: {
+          code: accessCode.code,
+          status: accessCode.status,
+          expiresAt: accessCode.expiresAt,
+          usedCount: accessCode.usedCount || 0,
+          maxUses: accessCode.maxUses || 0,
+          match: accessCode.match,
+          isNewRoom: accessCode.status === 'active', // Phòng mới (30 ngày)
+          isExistingRoom: accessCode.status === 'used', // Phòng đã có (2 tiếng)
+          timeRemaining: timeRemaining,
+          timeRemainingText: timeRemainingMessage
+        }
+      };
+
+      // Thêm warning message nếu có
+      if (warningMessage) {
+        responseData.warning = warningMessage;
+      }
+
+      return res.status(StatusCodes.OK).json(responseData);
+    }
+
+    // Trường hợp status không xác định (không nên xảy ra)
+    return res.status(StatusCodes.BAD_REQUEST).json({
+      success: false,
+      message: `Trạng thái mã truy cập không hợp lệ: ${accessCode.status}`,
+      isValid: false,
+      status: accessCode.status
     });
 
   } catch (error) {

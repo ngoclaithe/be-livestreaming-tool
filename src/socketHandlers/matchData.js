@@ -128,7 +128,7 @@ function handleMatchData(io, socket, rooms, userSessions) {
             }
 
             // Update in database
-            const result = await updateMatchInDatabase(accessCode, { liveUnit: liveUnit.text });
+            const result = await updateMatchInDatabase(accessCode, { live_unit: liveUnit.text });
             if (!result.success) {
                 throw new Error(result.error || 'Không thể cập nhật live unit');
             }
@@ -264,14 +264,14 @@ function handleMatchData(io, socket, rooms, userSessions) {
             const updateData = {};
             
             if (scores.teamA !== undefined) {
-                room.currentState.matchData.homeTeam = room.currentState.matchData.homeTeam || {};
-                room.currentState.matchData.homeTeam.score = parseInt(scores.teamA) || 0;
-                updateData.homeScore = room.currentState.matchData.homeTeam.score;
+                room.currentState.matchData.teamA = room.currentState.matchData.teamA || {};
+                room.currentState.matchData.teamA.score = parseInt(scores.teamA) || 0;
+                updateData.homeScore = room.currentState.matchData.teamA.score;
             }
             if (scores.teamB !== undefined) {
-                room.currentState.matchData.awayTeam = room.currentState.matchData.awayTeam || {};
-                room.currentState.matchData.awayTeam.score = parseInt(scores.teamB) || 0;
-                updateData.awayScore = room.currentState.matchData.awayTeam.score;
+                room.currentState.matchData.teamB = room.currentState.matchData.teamB || {};
+                room.currentState.matchData.teamB.score = parseInt(scores.teamB) || 0;
+                updateData.awayScore = room.currentState.matchData.teamB.score;
             }
             
             // Update scores and team info in database
@@ -281,16 +281,16 @@ function handleMatchData(io, socket, rooms, userSessions) {
 
             // Log để kiểm tra sau khi cập nhật
             console.log('Updated scores:', {
-                teamA: room.currentState.matchData.homeTeam?.score,
-                teamB: room.currentState.matchData.awayTeam?.score
+                teamA: room.currentState.matchData.teamA?.score,
+                teamB: room.currentState.matchData.teamB?.score
             });
             room.lastActivity = timestamp;
 
             // Broadcast to all clients in the room
             io.to(`room_${accessCode}`).emit('score_updated', {
                 scores: {
-                    home: room.currentState.matchData.homeTeam?.score || 0,
-                    away: room.currentState.matchData.awayTeam?.score || 0
+                    home: room.currentState.matchData.teamA?.score || 0,
+                    away: room.currentState.matchData.teamB?.score || 0
                 },
                 timestamp: timestamp
             });
@@ -346,13 +346,13 @@ function handleMatchData(io, socket, rooms, userSessions) {
             const updateData = {};
             
             if (names.teamA) {
-                room.currentState.matchData.homeTeam = room.currentState.matchData.homeTeam || {};
-                room.currentState.matchData.homeTeam.name = String(names.teamA);
+                room.currentState.matchData.teamA = room.currentState.matchData.teamA || {};
+                room.currentState.matchData.teamA.name = String(names.teamA);
                 updateData.teamAName = String(names.teamA);
             }
             if (names.teamB) {
-                room.currentState.matchData.awayTeam = room.currentState.matchData.awayTeam || {};
-                room.currentState.matchData.awayTeam.name = String(names.teamB);
+                room.currentState.matchData.teamB = room.currentState.matchData.teamB || {};
+                room.currentState.matchData.teamB.name = String(names.teamB);
                 updateData.teamBName = String(names.teamB);
             }
             
@@ -365,8 +365,8 @@ function handleMatchData(io, socket, rooms, userSessions) {
             // Broadcast to all clients in the room
             io.to(`room_${accessCode}`).emit('team_names_updated', {
                 names: {
-                    home: room.currentState.matchData.homeTeam.name,
-                    away: room.currentState.matchData.awayTeam.name
+                    home: room.currentState.matchData.teamA.name,
+                    away: room.currentState.matchData.teamB.name
                 },
                 timestamp: timestamp
             });
@@ -422,13 +422,13 @@ function handleMatchData(io, socket, rooms, userSessions) {
             const updateData = {};
             
             if (logos.teamA) {
-                room.currentState.matchData.homeTeam = room.currentState.matchData.homeTeam || {};
-                room.currentState.matchData.homeTeam.logo = String(logos.teamA);
+                room.currentState.matchData.teamA = room.currentState.matchData.teamA || {};
+                room.currentState.matchData.teamA.logo = String(logos.teamA);
                 updateData.teamALogo = String(logos.teamA);
             }
             if (logos.teamB) {
-                room.currentState.matchData.awayTeam = room.currentState.matchData.awayTeam || {};
-                room.currentState.matchData.awayTeam.logo = String(logos.teamB);
+                room.currentState.matchData.teamB = room.currentState.matchData.teamB || {};
+                room.currentState.matchData.teamB.logo = String(logos.teamB);
                 updateData.teamBLogo = String(logos.teamB);
             }
             
@@ -442,8 +442,8 @@ function handleMatchData(io, socket, rooms, userSessions) {
             // Broadcast to all clients in the room
             io.to(`room_${accessCode}`).emit('team_logos_updated', {
                 logos: {
-                    home: room.currentState.matchData.homeTeam.logo,
-                    away: room.currentState.matchData.awayTeam.logo
+                    home: room.currentState.matchData.teamA.logo,
+                    away: room.currentState.matchData.teamB.logo
                 },
                 timestamp: timestamp
             });

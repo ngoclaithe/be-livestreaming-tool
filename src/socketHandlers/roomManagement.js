@@ -71,6 +71,7 @@ async function validateAccessCode(accessCode) {
 }
 
 async function loadRoomData(accessCode) {
+
   try {
     const accessCodeData = await AccessCode.findOne({
       where: { code: accessCode },
@@ -119,7 +120,7 @@ async function loadRoomData(accessCode) {
         matchTitle: match.match_title,
         referee: match.referee,
         attendance: match.attendance,
-        liveUnit: match.live_unit,
+        liveText: match.live_unit,
         stats: {
           possession: match.possession || { home: 50, away: 50 },
           shots: match.shots || { home: 0, away: 0 },
@@ -133,7 +134,8 @@ async function loadRoomData(accessCode) {
         metadata: match.metadata
       };
     }
-
+    // console.log("Đây là giá trị load từ room", roomData);
+    console.log("Giá trị nguyên bản loadRoomDataa nè này111", roomData);
     return roomData;
   } catch (error) {
     logger.error('Error loading room data:', error);
@@ -144,17 +146,21 @@ async function loadRoomData(accessCode) {
 function mergeRoomDataWithState(roomState, loadedData) {
   if (loadedData.match) {
     const match = loadedData.match;
-    
+
     roomState.currentState.matchData = {
       teamA: {
         name: match.teamA.name,
         score: match.teamA.score,
-        logo: match.teamA.logo
+        logo: match.teamA.logo,
+        teamAKitColor: match.teamA.kitColor,    
+        teamAKit2Color: match.teamA.kit2Color   
       },
       teamB: {
         name: match.teamB.name,
         score: match.teamB.score,
-        logo: match.teamB.logo
+        logo: match.teamB.logo,
+        teamBKitColor: match.teamB.kitColor,    
+        teamBKit2Color: match.teamB.kit2Color   
       },
       matchTime: roomState.currentState.matchData.matchTime,
       period: roomState.currentState.matchData.period,
@@ -162,7 +168,9 @@ function mergeRoomDataWithState(roomState, loadedData) {
       tournament: match.tournament,
       stadium: match.stadium,
       matchDate: match.matchDate ? new Date(match.matchDate).toLocaleDateString() : "",
-      liveText: roomState.currentState.matchData.liveText
+      // liveText: roomState.currentState.matchData.liveText
+      liveText: match.liveText || roomState.currentState.matchData.liveText,
+      matchTitle: match.matchTitle || roomState.currentState.matchData.matchTitle || ""
     };
 
     if (match.stats) {
@@ -240,7 +248,7 @@ function scheduleRoomExpiration(io, accessCode, expiredAt, rooms) {
 async function handleRoomExpiration(io, accessCode, rooms) {
   try {
     logger.info(`Processing room expiration for: ${accessCode}`);
-    
+
     // Cập nhật database
     await Promise.all([
       RoomSession.update(
@@ -323,10 +331,10 @@ async function checkRoomExpirationOnActivity(accessCode) {
     const now = new Date();
     const isExpired = now > roomSession.expiredAt;
 
-    return { 
-      isExpired, 
+    return {
+      isExpired,
       expiredAt: roomSession.expiredAt,
-      roomSession 
+      roomSession
     };
   } catch (error) {
     logger.error('Error checking room expiration:', error);
@@ -345,18 +353,18 @@ function handleRoomManagement(io, socket, rooms, userSessions) {
       if (!data || typeof data !== 'object') {
         throw new Error('Invalid data format');
       }
-      
+
       const { accessCode, clientType = 'client' } = data;
-      
+
       if (!accessCode || typeof accessCode !== 'string' || accessCode.trim() === '') {
         logger.error('Invalid access code format:', { accessCode, socketId: socket.id });
         throw new Error('Mã truy cập không hợp lệ');
       }
 
       logger.info(`Client ${socket.id} joining room: ${accessCode} as ${clientType}`);
-      
+
       const isValid = await validateAccessCode(accessCode);
-      
+
       if (!isValid) {
         socket.emit('room_error', {
           error: 'Mã truy cập không hợp lệ',
@@ -388,30 +396,30 @@ function handleRoomManagement(io, socket, rooms, userSessions) {
         });
         return;
       }
-      
+
       const now = new Date();
-      
+
       let roomSession = expirationCheck.roomSession || await RoomSession.findOne({ where: { accessCode } });
       let isFirstTimeCreating = false;
       let isFirstDisplayConnection = false;
-      
+
       if (!roomSession) {
         isFirstTimeCreating = true;
-        
+
         const initialClientConnected = (clientType === 'admin' || clientType === 'client') ? [socket.id] : [];
         const initialDisplayConnected = (clientType === 'display') ? [socket.id] : [];
-        
+
         let expiredAt = null;
         if (clientType === 'display') {
           isFirstDisplayConnection = true;
           expiredAt = new Date();
           expiredAt.setHours(expiredAt.getHours() + 2);
           logger.info(`First display connected, setting expiredAt to: ${expiredAt}`);
-          
+
           // Tạo timeout cho room này
           scheduleRoomExpiration(io, accessCode, expiredAt, rooms);
         }
-        
+
         roomSession = await RoomSession.create({
           accessCode,
           status: 'active',
@@ -420,7 +428,7 @@ function handleRoomManagement(io, socket, rooms, userSessions) {
           displayConnected: initialDisplayConnected,
           lastActivityAt: now
         });
-        
+
       } else {
         // Kiểm tra RoomSession có expired không
         if (roomSession.status === 'expired') {
@@ -432,7 +440,7 @@ function handleRoomManagement(io, socket, rooms, userSessions) {
         }
 
         const updateData = { lastActivityAt: now };
-        
+
         if (clientType === 'admin' || clientType === 'client') {
           if (!roomSession.clientConnected.includes(socket.id)) {
             updateData.clientConnected = [...roomSession.clientConnected, socket.id];
@@ -440,7 +448,7 @@ function handleRoomManagement(io, socket, rooms, userSessions) {
         } else if (clientType === 'display') {
           if (!roomSession.displayConnected.includes(socket.id)) {
             updateData.displayConnected = [...roomSession.displayConnected, socket.id];
-            
+
             // Kiểm tra nếu đây là lần đầu tiên có display kết nối
             if (roomSession.displayConnected.length === 0) {
               isFirstDisplayConnection = true;
@@ -448,7 +456,7 @@ function handleRoomManagement(io, socket, rooms, userSessions) {
               expiredAt.setHours(expiredAt.getHours() + 2);
               updateData.expiredAt = expiredAt;
               logger.info(`First display connected to existing room, setting expiredAt to: ${expiredAt}`);
-              
+
               // Tạo timeout cho room này
               scheduleRoomExpiration(io, accessCode, expiredAt, rooms);
             } else if (roomSession.expiredAt) {
@@ -457,47 +465,70 @@ function handleRoomManagement(io, socket, rooms, userSessions) {
             }
           }
         }
-        
+
         await roomSession.update(updateData);
       }
 
       // Nếu là lần đầu tiên có display kết nối, cập nhật AccessCode status thành 'used'
       if (isFirstDisplayConnection) {
         await AccessCode.update(
-          { 
+          {
             status: 'used',
             lastUsedAt: now,
-            usageCount: sequelize.literal('usageCount + 1')
+            usageCount: sequelize.literal('"usageCount" + 1') 
           },
           { where: { code: accessCode } }
         );
         logger.info(`AccessCode ${accessCode} marked as used due to first display connection`);
       }
-      
+
+      // **BỔ SUNG: Load và sync dữ liệu từ database khi AccessCode active/used**
       if (!rooms.has(accessCode)) {
         const newRoom = createNewRoom(accessCode);
         const loadedData = await loadRoomData(accessCode);
         const mergedRoom = mergeRoomDataWithState(newRoom, loadedData);
         rooms.set(accessCode, mergedRoom);
+        logger.info(`Created new room ${accessCode} with loaded data from database`);
+      } else {
+        // Room đã tồn tại, nhưng vẫn cần sync dữ liệu mới nhất từ database
+        // Đặc biệt quan trọng khi AccessCode đang active/used
+        if (accessCodeData.status === 'active' || accessCodeData.status === 'used') {
+          const room = rooms.get(accessCode);
+          const loadedData = await loadRoomData(accessCode);
+          console.log("Giá trị của loadedData là", loadedData);
+
+          // Merge dữ liệu mới từ database vào room hiện tại
+          const updatedRoom = mergeRoomDataWithState(room, loadedData);
+          console.log("Giá trị của updatedRoom là", updatedRoom);
+          rooms.set(accessCode, updatedRoom);
+          console.log("Giá trị của rooms sau khi cập nhật updatedRoom là", rooms);
+          // logger.info(`Synced room ${accessCode} with latest database data (status: ${accessCodeData.status})`);
+
+          // Broadcast updated data to all clients in room (except the joining client)
+          socket.to(`room_${accessCode}`).emit('room_data_updated', {
+            currentState: updatedRoom.currentState,
+            message: 'Dữ liệu phòng đã được cập nhật từ database'
+          });
+        }
       }
-      
+
       const room = rooms.get(accessCode);
-      
+
       socket.join(`room_${accessCode}`);
-      
+
       const userData = userSessions.get(socket.id);
       if (!userData) {
         logger.error('User session not found for socket', { socketId: socket.id });
         throw new Error('Lỗi phiên người dùng');
       }
-      
+
       if (userData.currentRoom && userData.currentRoom !== accessCode) {
         this.handleLeaveRoom(socket, userData.currentRoom);
       }
-      
+
       userData.clientType = clientType;
       userData.currentRoom = accessCode;
-      
+
       if (clientType === 'admin') {
         room.adminClients.add(socket.id);
       } else if (clientType === 'client') {
@@ -505,55 +536,57 @@ function handleRoomManagement(io, socket, rooms, userSessions) {
       } else if (clientType === 'display') {
         room.displayClients.add(socket.id);
       }
-      
+
       logger.info(`Client joined room ${accessCode}`, { socketId: socket.id });
-      
+
       const response = {
         accessCode: accessCode,
         roomId: `room_${accessCode}`,
         currentState: room.currentState,
         clientCount: room.clients.size + room.adminClients.size,
         isAdmin: clientType === 'admin',
-        expiredAt: roomSession.expiredAt
+        expiredAt: roomSession.expiredAt,
+        // **BỔ SUNG: Thông tin về việc sync database**
+        dataSynced: accessCodeData.status === 'active' || accessCodeData.status === 'used'
       };
-      
+
       socket.emit('room_joined', response);
-      
-      if (room.clients.size + room.adminClients.size > 1) { 
+
+      if (room.clients.size + room.adminClients.size > 1) {
         const clientJoinedData = {
           clientId: socket.id,
           clientType: clientType,
           clientCount: room.clients.size + room.adminClients.size
         };
-        
+
         socket.to(`room_${accessCode}`).emit('client_joined', clientJoinedData);
       }
-      
+
       logger.info(`Client ${socket.id} joined room ${accessCode} as ${clientType}. Total clients: ${room.clients.size + room.adminClients.size}`);
-      
+
     } catch (error) {
       logger.error('Error in join_room:', error);
-      
+
       const errorResponse = {
         error: 'Lỗi khi tham gia phòng',
         details: error.message
       };
-      
+
       socket.emit('room_error', errorResponse);
     }
   });
-  
+
   socket.on('disconnect', async () => {
     logger.info(`Client disconnected: ${socket.id}`);
-    
+
     for (const [accessCode, room] of rooms.entries()) {
       let shouldUpdateDb = false;
       let updateData = {};
-      
+
       if (room.adminClients.has(socket.id)) {
         room.adminClients.delete(socket.id);
         shouldUpdateDb = true;
-        
+
         try {
           const roomSession = await RoomSession.findOne({ where: { accessCode } });
           if (roomSession) {
@@ -566,7 +599,7 @@ function handleRoomManagement(io, socket, rooms, userSessions) {
       } else if (room.clients.has(socket.id)) {
         room.clients.delete(socket.id);
         shouldUpdateDb = true;
-        
+
         try {
           const roomSession = await RoomSession.findOne({ where: { accessCode } });
           if (roomSession) {
@@ -579,7 +612,7 @@ function handleRoomManagement(io, socket, rooms, userSessions) {
       } else if (room.displayClients.has(socket.id)) {
         room.displayClients.delete(socket.id);
         shouldUpdateDb = true;
-        
+
         try {
           const roomSession = await RoomSession.findOne({ where: { accessCode } });
           if (roomSession) {
@@ -590,7 +623,7 @@ function handleRoomManagement(io, socket, rooms, userSessions) {
           logger.error('Error finding RoomSession on display disconnect:', error);
         }
       }
-      
+
       if (shouldUpdateDb && Object.keys(updateData).length > 0) {
         try {
           await RoomSession.update(updateData, {
@@ -600,51 +633,51 @@ function handleRoomManagement(io, socket, rooms, userSessions) {
           logger.error('Error updating RoomSession on disconnect:', error);
         }
       }
-      
+
       if (room.clients.size === 0 && room.adminClients.size === 0 && room.displayClients.size === 0) {
         try {
           await RoomSession.destroy({ where: { accessCode } });
           rooms.delete(accessCode);
-          
+
           // Clear timeout khi room bị xóa
           if (roomTimeouts.has(accessCode)) {
             clearTimeout(roomTimeouts.get(accessCode));
             roomTimeouts.delete(accessCode);
           }
-          
+
           logger.info(`Room ${accessCode} removed (no clients)`);
         } catch (error) {
           logger.error('Error removing RoomSession:', error);
         }
       }
     }
-    
+
     userSessions.delete(socket.id);
     logger.info(`User session removed for socket: ${socket.id}`);
   });
-  
+
   socket.on('leave_room', async (data) => {
     try {
       const { accessCode } = data || {};
-      
+
       if (!accessCode) {
         throw new Error('Access code is required');
       }
-      
+
       const room = rooms.get(accessCode);
       if (!room) {
         throw new Error('Room not found');
       }
-      
+
       socket.leave(`room_${accessCode}`);
-      
+
       let shouldUpdateDb = false;
       let updateData = {};
-      
+
       if (room.adminClients.has(socket.id)) {
         room.adminClients.delete(socket.id);
         shouldUpdateDb = true;
-        
+
         const roomSession = await RoomSession.findOne({ where: { accessCode } });
         if (roomSession) {
           const updatedClientConnected = roomSession.clientConnected.filter(id => id !== socket.id);
@@ -653,7 +686,7 @@ function handleRoomManagement(io, socket, rooms, userSessions) {
       } else if (room.clients.has(socket.id)) {
         room.clients.delete(socket.id);
         shouldUpdateDb = true;
-        
+
         const roomSession = await RoomSession.findOne({ where: { accessCode } });
         if (roomSession) {
           const updatedClientConnected = roomSession.clientConnected.filter(id => id !== socket.id);
@@ -662,53 +695,53 @@ function handleRoomManagement(io, socket, rooms, userSessions) {
       } else if (room.displayClients.has(socket.id)) {
         room.displayClients.delete(socket.id);
         shouldUpdateDb = true;
-        
+
         const roomSession = await RoomSession.findOne({ where: { accessCode } });
         if (roomSession) {
           const updatedDisplayConnected = roomSession.displayConnected.filter(id => id !== socket.id);
           updateData.displayConnected = updatedDisplayConnected;
         }
       }
-      
+
       if (shouldUpdateDb && Object.keys(updateData).length > 0) {
         await RoomSession.update(updateData, {
           where: { accessCode }
         });
       }
-      
+
       socket.to(`room_${accessCode}`).emit('client_left', {
         clientId: socket.id,
         clientCount: room.clients.size + room.adminClients.size
       });
-      
+
       if (room.clients.size === 0 && room.adminClients.size === 0 && room.displayClients.size === 0) {
         await RoomSession.destroy({ where: { accessCode } });
         rooms.delete(accessCode);
-        
+
         // Clear timeout khi room bị xóa
         if (roomTimeouts.has(accessCode)) {
           clearTimeout(roomTimeouts.get(accessCode));
           roomTimeouts.delete(accessCode);
         }
-        
+
         logger.info(`Room ${accessCode} cleaned up (no more clients)`);
       }
-      
+
       const userData = userSessions.get(socket.id);
       if (userData) {
         userData.currentRoom = null;
         userData.clientType = null;
       }
-      
+
       const leaveResponse = {
         accessCode: accessCode,
         message: 'Đã rời phòng thành công'
       };
-      
+
       socket.emit('room_left', leaveResponse);
-      
+
       logger.info(`Client ${socket.id} left room ${accessCode}. Remaining clients: ${room.clients.size + room.adminClients.size}`);
-      
+
     } catch (error) {
       logger.error('Error in leave_room:', error);
       socket.emit('room_error', {
@@ -726,15 +759,15 @@ function cleanupRoomTimeouts() {
     logger.info(`Cleared timeout for room: ${accessCode}`);
   }
   roomTimeouts.clear();
-  
+
   if (globalExpirationChecker) {
     clearInterval(globalExpirationChecker);
     globalExpirationChecker = null;
   }
 }
 
-module.exports = { 
-  handleRoomManagement, 
+module.exports = {
+  handleRoomManagement,
   cleanupRoomTimeouts,
-  handleRoomExpiration 
+  handleRoomExpiration
 };

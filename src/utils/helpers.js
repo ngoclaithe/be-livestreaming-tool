@@ -34,7 +34,14 @@ const formatCurrencyVND = (amount) => {
   }).format(amount);
 };
 
+function toDateInputFormat(dateStr) {
+  const date = new Date(dateStr);
+  if (isNaN(date.getTime())) return '';
+  return date.toISOString().split('T')[0];
+}
+
 module.exports = {
   generateRandomCode,
   formatCurrencyVND,
+  toDateInputFormat
 };

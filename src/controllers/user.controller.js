@@ -57,7 +57,7 @@ exports.getUser = async (req, res, next) => {
       include: [
         {
           association: 'matches',
-          attributes: ['id', 'matchName', 'homeTeam', 'awayTeam', 'matchDate', 'status']
+          attributes: ['id', 'matchName', 'teamA', 'teamB', 'matchDate', 'status']
         },
         {
           association: 'accessCodes',

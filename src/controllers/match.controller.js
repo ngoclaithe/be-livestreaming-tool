@@ -33,8 +33,8 @@ exports.getMatches = async (req, res, next) => {
     }
     if (teamName) {
       where[Op.or] = [
-        { homeTeam: { [Op.iLike]: `%${teamName}%` } },
-        { awayTeam: { [Op.iLike]: `%${teamName}%` } }
+        { teamA: { [Op.iLike]: `%${teamName}%` } },
+        { teamB: { [Op.iLike]: `%${teamName}%` } }
       ];
     }
     if (tournament) where.tournamentName = { [Op.iLike]: `%${tournament}%` };

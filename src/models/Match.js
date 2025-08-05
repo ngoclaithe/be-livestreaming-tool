@@ -46,12 +46,6 @@ const Match = sequelize.define('Match', {
     allowNull: false,
     comment: 'Match start time',
   },
-  liveUnit: {
-    type: DataTypes.STRING(200),
-    allowNull: true,
-    // defaultValue: 'NSB',
-    comment: 'Current live unit for the match',
-  },
   typeMatch: {
     type: DataTypes.ENUM('soccer', 'pickleball', 'other', 'futsal'),
     defaultValue: 'soccer',
@@ -158,7 +152,7 @@ const Match = sequelize.define('Match', {
     comment: 'Màu quần đội B',
   },
   live_unit: {
-    type: DataTypes.STRING(10),
+    type: DataTypes.STRING(100),
     allowNull: true,
     comment: 'Đơn vị live',
   },
