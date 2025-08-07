@@ -616,6 +616,17 @@ exports.verifyAccessCode = async (req, res, next) => {
         }
       }
 
+      // Xác định type_match dựa trên tiền tố của mã code
+      let type_match = 'soccer'; // Mặc định là soccer
+      if (code && code.length > 0) {
+        const prefix = code[0].toUpperCase();
+        if (prefix === 'P') {
+          type_match = 'pickleball';
+        } else if (prefix === 'F') {
+          type_match = 'futsal';
+        }
+      }
+
       const responseData = {
         success: true,
         message: accessCode.status === 'active' 
@@ -629,6 +640,7 @@ exports.verifyAccessCode = async (req, res, next) => {
           usedCount: accessCode.usedCount || 0,
           maxUses: accessCode.maxUses || 0,
           match: accessCode.match,
+          type_match: type_match, 
           isNewRoom: accessCode.status === 'active', // Phòng mới (30 ngày)
           isExistingRoom: accessCode.status === 'used', // Phòng đã có (2 tiếng)
           timeRemaining: timeRemaining,
