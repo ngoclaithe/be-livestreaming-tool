@@ -6,22 +6,18 @@ function cleanLogoUrl(logoUrl) {
     return logoUrl;
   }
 
-  const patterns = [
-    /^https?:\/\/[^\/]+\/api\/v1(\/.+)$/,  // Matches http://... or https://... with any domain/IP
-  ];
+  const pattern = /^https?:\/\/[^\/]+\/api\/v1(\/.+)$/;
 
-  for (const pattern of patterns) {
-    const match = logoUrl.match(pattern);
-    if (match) {
-      return `/api/v1${match[1]}`;
-    }
+  const match = logoUrl.match(pattern);
+  if (match) {
+    return match[1];
   }
 
   return logoUrl;
 }
+
 async function updateMatchInfo(accessCode, matchInfo) {
   try {
-    // Tìm AccessCode và Match tương ứng
     const accessCodeData = await AccessCode.findOne({
       where: { code: accessCode },
       include: [{
@@ -64,13 +60,19 @@ async function updateMatchInfo(accessCode, matchInfo) {
     if (matchInfo.teamBkitcolor !== undefined || matchInfo.teamBKitColor !== undefined) {
       updates.teamBkitcolor = matchInfo.teamBkitcolor || matchInfo.teamBKitColor;
     }
+    if (matchInfo.teamA2KitColor !== undefined) {
+      updates.teamA2kitcolor = matchInfo.teamA2KitColor;
+    }
+    if (matchInfo.teamB2KitColor !== undefined) {
+      updates.teamB2kitcolor = matchInfo.teamB2KitColor;
+    }
 
     // Chỉ update nếu có thay đổi
     if (Object.keys(updates).length > 0) {
       await match.update(updates);
       logger.info(`Updated match ${match.id} with new info`, updates);
     }
-    console.log("Giá trị của match là", match);
+    // console.log("Giá trị của match là", match);
     return match;
   } catch (error) {
     logger.error('Error updating match info:', error);
@@ -607,126 +609,191 @@ function handleDisplaySettings(io, socket, rooms, userSessions) {
     }
   });
 
-  // Live unit update
-  // socket.on('live_unit_update', (data) => {
-
+  // socket.on('match_info_update', async (data) => {
+  //   console.log("Giá trị match_info_update là:", data);
   //   try {
-  //     const { accessCode, live_unit, timestamp = Date.now() } = data;     
-  //     if (!accessCode || !live_unit) {
-  //       throw new Error('Access code and live_unit data are required');
+  //     const { accessCode, matchInfo, timestamp = Date.now() } = data;
+
+  //     if (!accessCode || !matchInfo) {
+  //       throw new Error('Access code and match info are required');
   //     }
 
   //     const room = rooms.get(accessCode);
-
   //     if (!room) {
   //       throw new Error('Room not found');
   //     }
 
   //     const userData = userSessions.get(socket.id);
-  //     const isAdmin = userData && room.adminClients.has(socket.id);
-
   //     if (!userData || !room.adminClients.has(socket.id)) {
-  //       throw new Error('Unauthorized: Only admin can update live_unit');
+  //       throw new Error('Unauthorized: Only admin can update match info');
   //     }
 
-  //     if (!room.currentState.live_unit) {
-  //       room.currentState.live_unit = {
-  //         code_logo: [],
-  //         url_logo: [],
-  //         position: [],
-  //         type_display: []
-  //       };
-  //     }
+  //     // Cập nhật database trước
+  //     const updatedMatch = await updateMatchInfo(accessCode, matchInfo);
 
-  //     if (live_unit.code_logo !== undefined) {
-  //       room.currentState.live_unit.code_logo = live_unit.code_logo || [];
-  //     }
-  //     if (live_unit.url_logo !== undefined) {
-  //       room.currentState.live_unit.url_logo = live_unit.url_logo || [];
-  //     }
-  //     if (live_unit.position !== undefined) {
-  //       room.currentState.live_unit.position = live_unit.position || [];
-  //     }
-  //     if (live_unit.type_display !== undefined) {
-  //       room.currentState.live_unit.type_display = live_unit.type_display || [];
-  //     }
+  //     // Sau đó cập nhật room state
+  //     const fieldsToUpdate = [
+  //       'tournament', 'stadium', 'matchDate', 'liveText', 'startTime', 'matchTitle',
+  //       'teamAkitcolor', 'teamBkitcolor', 'teamA2kitcolor', 'teamB2kitcolor' 
+  //     ];
+  //     fieldsToUpdate.forEach(field => {
+  //       if (matchInfo[field] !== undefined) {
+  //         if (field === 'teamAkitcolor') {
+  //           room.currentState.matchData.teamA.teamAKitColor = matchInfo[field];
+  //         } else if (field === 'teamBkitcolor') {
+  //           room.currentState.matchData.teamB.teamBKitColor = matchInfo[field];
+  //         } else if (field === 'teamA2kitcolor') {
+  //           room.currentState.matchData.teamA.teamA2KitColor = matchInfo[field];
+  //         } else if (field === 'teamB2kitcolor') {
+  //           room.currentState.matchData.teamB.teamB2KitColor = matchInfo[field];
+  //         } else {
+  //           // Các field khác vẫn cập nhật ở level gốc
+  //           room.currentState.matchData[field] = matchInfo[field];
+  //         }
+  //       }
+  //     });    
 
   //     room.lastActivity = timestamp;
 
-  //     // Broadcast to all clients in the room
-  //     io.to(`room_${accessCode}`).emit('live_unit_updated', {
-  //       live_unit: room.currentState.live_unit,
-  //       timestamp: timestamp
+  //     const responseMatchInfo = {};
+  //     const possibleFields = [
+  //       'tournament', 'stadium', 'matchDate', 'liveText', 'startTime', 'matchTitle',
+  //       'teamAkitcolor', 'teamBkitcolor', 'teamA2kitcolor', 'teamB2kitcolor'  
+  //     ]
+  //     possibleFields.forEach(field => {
+  //       if (room.currentState.matchData[field] !== undefined) {
+  //         responseMatchInfo[field] = room.currentState.matchData[field];
+  //       } else {
+  //         console.log(`❌ ${field} undefined trong room state`);
+  //       }
   //     });
 
-  //     // console.log('📤 Broadcasted to room:', accessCode);
+  //     // Gửi thông tin match đã được cập nhật từ database
+  //     responseMatchInfo.matchId = updatedMatch.id;
+  //     responseMatchInfo.updatedAt = updatedMatch.updatedAt;
 
+  //     if (room.currentState.matchData.teamA?.teamAKitColor) {
+  //       responseMatchInfo.teamAkitcolor = room.currentState.matchData.teamA.teamAKitColor;
+  //     }
+  //     if (room.currentState.matchData.teamB?.teamBKitColor) {
+  //       responseMatchInfo.teamBkitcolor = room.currentState.matchData.teamB.teamBKitColor;
+  //     }
+  //     if (room.currentState.matchData.teamA?.teamA2KitColor) {
+  //       responseMatchInfo.teamA2kitcolor = room.currentState.matchData.teamA.teamA2KitColor;
+  //     }
+  //     if (room.currentState.matchData.teamB?.teamB2KitColor) {
+  //       responseMatchInfo.teamB2kitcolor = room.currentState.matchData.teamB.teamB2KitColor;
+  //     }
+  //     io.to(`room_${accessCode}`).emit('match_info_updated', {
+  //       matchInfo: responseMatchInfo,
+  //       timestamp: timestamp
+  //     });
+  //     console.log("Giá trị trả về match_info_updated là:", responseMatchInfo);
+  //     logger.info(`Match info updated for room ${accessCode}`);
 
   //   } catch (error) {
-  //     console.error('❌ Error in live_unit_update:', error.message);
+  //     logger.error('Error in match_info_update:', error);
+  //     socket.emit('match_info_error', {
+  //       error: error.message,
+  //       details: 'Failed to update match info'
+  //     });
   //   }
   // });
 
-  // General match info update (tournament, stadium, etc.)
   socket.on('match_info_update', async (data) => {
-    console.log("Giá trị match_info_update là:", data);
+    // console.log("Giá trị match_info_update là:", data);
     try {
       const { accessCode, matchInfo, timestamp = Date.now() } = data;
-
+  
       if (!accessCode || !matchInfo) {
         throw new Error('Access code and match info are required');
       }
-
+  
       const room = rooms.get(accessCode);
       if (!room) {
         throw new Error('Room not found');
       }
-
+  
       const userData = userSessions.get(socket.id);
       if (!userData || !room.adminClients.has(socket.id)) {
         throw new Error('Unauthorized: Only admin can update match info');
       }
-
+  
       // Cập nhật database trước
       const updatedMatch = await updateMatchInfo(accessCode, matchInfo);
+      console.log("🔍 updatedMatch từ database:", {
+        teamAkitcolor: updatedMatch.teamAkitcolor,
+        teamBkitcolor: updatedMatch.teamBkitcolor,  
+        teamA2kitcolor: updatedMatch.teamA2kitcolor,
+        teamB2kitcolor: updatedMatch.teamB2kitcolor
+      });
+  
 
-      // Sau đó cập nhật room state
-      const fieldsToUpdate = [
-        'tournament', 'stadium', 'matchDate', 'liveText', 'startTime', 'matchTitle'
-      ];
-
-      fieldsToUpdate.forEach(field => {
+      const regularFields = ['tournament', 'stadium', 'matchDate', 'liveText', 'startTime', 'matchTitle'];
+      regularFields.forEach(field => {
         if (matchInfo[field] !== undefined) {
           room.currentState.matchData[field] = matchInfo[field];
         }
       });
-
-      if (matchInfo.time !== undefined) {
-        room.currentState.matchData.startTime = matchInfo.time;
+  
+      if (updatedMatch.teamAkitcolor !== undefined) {
+        room.currentState.matchData.teamA.teamAKitColor = updatedMatch.teamAkitcolor;
+        console.log(`✅ Synced teamA.teamAKitColor = ${updatedMatch.teamAkitcolor}`);
       }
-
+      if (updatedMatch.teamBkitcolor !== undefined) {
+        room.currentState.matchData.teamB.teamBKitColor = updatedMatch.teamBkitcolor;
+        console.log(`✅ Synced teamB.teamBKitColor = ${updatedMatch.teamBkitcolor}`);
+      }
+      if (updatedMatch.teamA2kitcolor !== undefined) {
+        room.currentState.matchData.teamA.teamA2KitColor = updatedMatch.teamA2kitcolor;
+        console.log(`✅ Synced teamA.teamA2KitColor = ${updatedMatch.teamA2kitcolor}`);
+      }
+      if (updatedMatch.teamB2kitcolor !== undefined) {
+        room.currentState.matchData.teamB.teamB2KitColor = updatedMatch.teamB2kitcolor;
+        console.log(`✅ Synced teamB.teamB2KitColor = ${updatedMatch.teamB2kitcolor}`);
+      }
+  
+      console.log("🔍 SAU SYNC - room.currentState.matchData.teamA:", room.currentState.matchData.teamA);
+      console.log("🔍 SAU SYNC - room.currentState.matchData.teamB:", room.currentState.matchData.teamB);
+  
       room.lastActivity = timestamp;
-
+  
+      // Tạo response object
       const responseMatchInfo = {};
-      const possibleFields = ['tournament', 'stadium', 'matchDate', 'liveText', 'startTime', 'matchTitle'];
-
-      possibleFields.forEach(field => {
+      
+      // Các field thông thường
+      regularFields.forEach(field => {
         if (room.currentState.matchData[field] !== undefined) {
           responseMatchInfo[field] = room.currentState.matchData[field];
         }
       });
-
-      // Gửi thông tin match đã được cập nhật từ database
+      
+      // Lấy kit colors từ room state (đã được sync từ database)
+      if (room.currentState.matchData.teamA?.teamAKitColor !== undefined) {
+        responseMatchInfo.teamAkitcolor = room.currentState.matchData.teamA.teamAKitColor;
+      }
+      if (room.currentState.matchData.teamB?.teamBKitColor !== undefined) {
+        responseMatchInfo.teamBkitcolor = room.currentState.matchData.teamB.teamBKitColor;
+      }
+      if (room.currentState.matchData.teamA?.teamA2KitColor !== undefined) {
+        responseMatchInfo.teamA2kitcolor = room.currentState.matchData.teamA.teamA2KitColor;
+      }
+      if (room.currentState.matchData.teamB?.teamB2KitColor !== undefined) {
+        responseMatchInfo.teamB2kitcolor = room.currentState.matchData.teamB.teamB2KitColor;
+      }
+      
+      // Gửi thông tin match
       responseMatchInfo.matchId = updatedMatch.id;
       responseMatchInfo.updatedAt = updatedMatch.updatedAt;
-
+  
       io.to(`room_${accessCode}`).emit('match_info_updated', {
         matchInfo: responseMatchInfo,
         timestamp: timestamp
       });
-
+      
+      console.log("Giá trị trả về match_info_updated là:", responseMatchInfo);
       logger.info(`Match info updated for room ${accessCode}`);
-
+  
     } catch (error) {
       logger.error('Error in match_info_update:', error);
       socket.emit('match_info_error', {

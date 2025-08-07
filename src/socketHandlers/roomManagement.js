@@ -144,6 +144,7 @@ async function loadRoomData(accessCode) {
 function mergeRoomDataWithState(roomState, loadedData) {
   if (loadedData.match) {
     const match = loadedData.match;
+    console.log("giá trị khi load xong match là:", match);
 
     roomState.currentState.matchData = {
       teamA: {
@@ -151,14 +152,14 @@ function mergeRoomDataWithState(roomState, loadedData) {
         score: match.teamA.score,
         logo: match.teamA.logo,
         teamAKitColor: match.teamA.kitColor,    
-        teamAKit2Color: match.teamA.kit2Color   
+        teamA2KitColor: match.teamA.kit2Color   
       },
       teamB: {
         name: match.teamB.name,
         score: match.teamB.score,
         logo: match.teamB.logo,
         teamBKitColor: match.teamB.kitColor,    
-        teamBKit2Color: match.teamB.kit2Color   
+        teamB2KitColor: match.teamB.kit2Color   
       },
       matchTime: roomState.currentState.matchData.matchTime,
       period: roomState.currentState.matchData.period,

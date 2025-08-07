@@ -8,15 +8,11 @@ function cleanLogoUrl(logoUrl) {
         return logoUrl;
     }
 
-    const patterns = [
-        /^https?:\/\/[^\/]+\/api\/v1(\/.+)$/,  // Matches http://... or https://... with any domain/IP
-    ];
+    const pattern = /^https?:\/\/[^\/]+\/api\/v1(\/.+)$/;
 
-    for (const pattern of patterns) {
-        const match = logoUrl.match(pattern);
-        if (match) {
-            return `/api/v1${match[1]}`;
-        }
+    const match = logoUrl.match(pattern);
+    if (match) {
+        return match[1];
     }
 
     return logoUrl;
@@ -25,12 +21,12 @@ function cleanLogoUrl(logoUrl) {
 async function updateMatchInDatabase(accessCode, updateData) {
     try {
         const cleanedUpdateData = { ...updateData };
-        
+
         if (cleanedUpdateData.teamALogo) {
             cleanedUpdateData.teamALogo = cleanLogoUrl(cleanedUpdateData.teamALogo);
             logger.info(`Cleaned teamALogo: ${updateData.teamALogo} -> ${cleanedUpdateData.teamALogo}`);
         }
-        
+
         if (cleanedUpdateData.teamBLogo) {
             cleanedUpdateData.teamBLogo = cleanLogoUrl(cleanedUpdateData.teamBLogo);
             logger.info(`Cleaned teamBLogo: ${updateData.teamBLogo} -> ${cleanedUpdateData.teamBLogo}`);
@@ -58,8 +54,8 @@ async function updateMatchInDatabase(accessCode, updateData) {
 
         if (!accessCodeRecord.match) {
             logger.error(`Match not found with ID: ${accessCodeRecord.matchId} referenced by access code: ${accessCode}`);
-            return { 
-                success: false, 
+            return {
+                success: false,
                 error: 'Thông tin trận đấu không tồn tại',
                 details: `Match ID ${accessCodeRecord.matchId} not found`
             };
@@ -71,8 +67,8 @@ async function updateMatchInDatabase(accessCode, updateData) {
 
         if (updated === 0) {
             logger.error(`Failed to update match with ID: ${accessCodeRecord.matchId}`);
-            return { 
-                success: false, 
+            return {
+                success: false,
                 error: 'Không thể cập nhật thông tin trận đấu',
                 details: 'No rows were updated'
             };
@@ -81,14 +77,14 @@ async function updateMatchInDatabase(accessCode, updateData) {
         logger.info(`Match ${accessCodeRecord.matchId} updated in database via access code ${accessCode}`);
         return { success: true };
     } catch (error) {
-        logger.error(`Error updating match in database: ${error.message}`, { 
+        logger.error(`Error updating match in database: ${error.message}`, {
             error: error.message,
             stack: error.stack,
             accessCode,
             updateData
         });
-        return { 
-            success: false, 
+        return {
+            success: false,
             error: 'Lỗi khi cập nhật cơ sở dữ liệu',
             details: error.message
         };
@@ -100,7 +96,7 @@ function handleMatchData(io, socket, rooms, userSessions) {
     socket.on('live_unit_update', async (data) => {
         try {
             const { accessCode, liveUnit } = data;
-            
+
             // Validate input
             if (!accessCode) {
                 throw new Error('Mã truy cập không hợp lệ');
@@ -135,7 +131,7 @@ function handleMatchData(io, socket, rooms, userSessions) {
 
             // Update room state
             room.currentState.matchData.liveText = liveUnit.text || null;
-            
+
             // Broadcast to all clients in the room
             io.to(`room_${accessCode}`).emit('live_unit_updated', {
                 liveText: room.currentState.matchData.liveText,
@@ -143,13 +139,13 @@ function handleMatchData(io, socket, rooms, userSessions) {
             });
 
         } catch (error) {
-            logger.error(`Live unit update error: ${error.message}`, { 
-                error: error.toString(), 
+            logger.error(`Live unit update error: ${error.message}`, {
+                error: error.toString(),
                 stack: error.stack,
                 socketId: socket.id,
                 data: data
             });
-            
+
             socket.emit('live_unit_update_error', {
                 error: error.message || 'Đã xảy ra lỗi khi cập nhật live unit',
                 code: error.code || 'UPDATE_ERROR',
@@ -191,7 +187,7 @@ function handleMatchData(io, socket, rooms, userSessions) {
 
             // Prepare update data
             const updateData = {};
-            
+
             // Process title if provided
             if (matchTitle !== undefined) {
                 room.currentState.matchData.matchTitle = matchTitle;
@@ -204,13 +200,13 @@ function handleMatchData(io, socket, rooms, userSessions) {
                 if (!result.success) {
                     throw new Error(result.error || 'Không thể cập nhật thông tin trận đấu');
                 }
-                
+
                 io.to(`room_${accessCode}`).emit('match_title_updated', {
                     matchTitle: room.currentState.matchData.matchTitle,
                     timestamp: timestamp
                 });
-                
-                logger.info(`Match title updated for room ${accessCode}`, { 
+
+                logger.info(`Match title updated for room ${accessCode}`, {
                     matchTitle: matchTitle
                 });
             }
@@ -262,7 +258,7 @@ function handleMatchData(io, socket, rooms, userSessions) {
 
             // Update scores with new teamA/teamB structure
             const updateData = {};
-            
+
             if (scores.teamA !== undefined) {
                 room.currentState.matchData.teamA = room.currentState.matchData.teamA || {};
                 room.currentState.matchData.teamA.score = parseInt(scores.teamA) || 0;
@@ -273,7 +269,7 @@ function handleMatchData(io, socket, rooms, userSessions) {
                 room.currentState.matchData.teamB.score = parseInt(scores.teamB) || 0;
                 updateData.awayScore = room.currentState.matchData.teamB.score;
             }
-            
+
             // Update scores and team info in database
             if (Object.keys(updateData).length > 0) {
                 updateMatchInDatabase(accessCode, updateData);
@@ -294,7 +290,7 @@ function handleMatchData(io, socket, rooms, userSessions) {
                 },
                 timestamp: timestamp
             });
-            
+
             // Update scores in database if matchId exists
             if (Object.keys(updateData).length > 0 && room.matchId) {
                 updateMatchInDatabase(room.matchId, updateData);
@@ -344,7 +340,7 @@ function handleMatchData(io, socket, rooms, userSessions) {
 
             // Update team names with new structure and prepare for database update
             const updateData = {};
-            
+
             if (names.teamA) {
                 room.currentState.matchData.teamA = room.currentState.matchData.teamA || {};
                 room.currentState.matchData.teamA.name = String(names.teamA);
@@ -355,7 +351,7 @@ function handleMatchData(io, socket, rooms, userSessions) {
                 room.currentState.matchData.teamB.name = String(names.teamB);
                 updateData.teamBName = String(names.teamB);
             }
-            
+
             // Update team names in database
             if (Object.keys(updateData).length > 0) {
                 updateMatchInDatabase(accessCode, updateData);
@@ -384,7 +380,7 @@ function handleMatchData(io, socket, rooms, userSessions) {
 
     // Team logos update
     socket.on('team_logos_update', (data) => {
-        // console.log("Giá trị Team logos update", data);
+        console.log("Giá trị Team logos update", data);
         try {
             const { accessCode, logos, timestamp = Date.now() } = data;
 
@@ -420,7 +416,7 @@ function handleMatchData(io, socket, rooms, userSessions) {
 
             // Update team logos with new teamA/teamB structure and prepare for database update
             const updateData = {};
-            
+
             if (logos.teamA) {
                 room.currentState.matchData.teamA = room.currentState.matchData.teamA || {};
                 room.currentState.matchData.teamA.logo = String(logos.teamA);
@@ -431,12 +427,13 @@ function handleMatchData(io, socket, rooms, userSessions) {
                 room.currentState.matchData.teamB.logo = String(logos.teamB);
                 updateData.teamBLogo = String(logos.teamB);
             }
-            
+
             // Update team logos in database
             if (Object.keys(updateData).length > 0) {
                 updateMatchInDatabase(accessCode, updateData);
+                console.log("Giá trị của updateData", updateData);
             }
-            
+
             room.lastActivity = timestamp;
 
             // Broadcast to all clients in the room
