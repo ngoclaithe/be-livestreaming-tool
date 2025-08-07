@@ -11,7 +11,7 @@ const getAllRoomSessions = async (req, res) => {
             include: [
                 {
                     association: 'accessCodeInfo',
-                    attributes: ['code', 'status', 'expiresAt']
+                    attributes: ['code', 'status', 'expiredAt']
                 }
             ]
         });
@@ -34,7 +34,7 @@ const getRoomSessionById = async (req, res) => {
             include: [
                 {
                     association: 'accessCodeInfo',
-                    attributes: ['code', 'status', 'expiresAt']
+                    attributes: ['code', 'status', 'expiredAt']
                 }
             ]
         });
@@ -63,7 +63,7 @@ const getRoomSessionByAccessCode = async (req, res) => {
             include: [
                 {
                     association: 'accessCodeInfo',
-                    attributes: ['code', 'status', 'expiresAt']
+                    attributes: ['code', 'status', 'expiredAt']
                 }
             ]
         });
@@ -91,7 +91,7 @@ const getActiveRoomSessions = async (req, res) => {
             include: [
                 {
                     association: 'accessCodeInfo',
-                    attributes: ['code', 'status', 'expiresAt']
+                    attributes: ['code', 'status', 'expiredAt']
                 }
             ]
         });

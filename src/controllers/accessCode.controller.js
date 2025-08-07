@@ -17,7 +17,7 @@ exports.createAccessCode = async (req, res, next) => {
   
   try {
     console.log('Request body:', req.body);
-    const { typeMatch, maxUses = 1, metadata = {}, expiresAt } = req.body;
+    const { typeMatch, maxUses = 1, metadata = {}, expiredAt } = req.body;
     
     if (!typeMatch) {
       throw new ApiError(StatusCodes.BAD_REQUEST, 'typeMatch is required');
@@ -79,11 +79,11 @@ exports.createAccessCode = async (req, res, next) => {
       maxUses: parseInt(maxUses, 10) || 1,
       usageCount: 0,
       metadata: metadata || {},
-      expiresAt: expiresAt ? new Date(expiresAt) : null
+      expiredAt: expiredAt ? new Date(expiredAt) : null
     }, { transaction });
 
-    // Nếu không có expiresAt, đặt mặc định 30 ngày
-    if (!expiresAt) {
+    // Nếu không có expiredAt, đặt mặc định 30 ngày
+    if (!expiredAt) {
       await accessCode.setExpiry(30, transaction);
     }
 
@@ -399,7 +399,7 @@ exports.updateAccessCode = async (req, res, next) => {
       return next(new ApiError('Không có quyền cập nhật access code này', StatusCodes.FORBIDDEN));
     }
 
-    const { status, expiresAt, maxUses, metadata } = req.body;
+    const { status, expiredAt, maxUses, metadata } = req.body;
     
     // Kiểm tra giá trị status hợp lệ
     const validStatuses = ['active', 'used', 'expired', 'revoked'];
@@ -409,7 +409,7 @@ exports.updateAccessCode = async (req, res, next) => {
       }
       accessCode.status = status;
     }
-    if (expiresAt) accessCode.expiresAt = new Date(expiresAt);
+    if (expiredAt) accessCode.expiredAt = new Date(expiredAt);
     if (maxUses !== undefined) accessCode.maxUses = maxUses;
     if (metadata) accessCode.metadata = { ...accessCode.metadata, ...metadata };
     
@@ -477,7 +477,7 @@ exports.useAccessCode = async (req, res, next) => {
     }
 
     // Kiểm tra hạn sử dụng
-    if (accessCode.expiresAt && new Date() > new Date(accessCode.expiresAt)) {
+    if (accessCode.expiredAt && new Date() > new Date(accessCode.expiredAt)) {
       accessCode.status = 'expired';
       await accessCode.save();
       return next(new ApiError('Access code đã hết hạn', StatusCodes.BAD_REQUEST));
@@ -564,7 +564,7 @@ exports.verifyAccessCode = async (req, res, next) => {
     }
 
     // Kiểm tra thời hạn cho cả 'active' và 'used'
-    if (accessCode.expiresAt && new Date(accessCode.expiresAt) < new Date()) {
+    if (accessCode.expiredAt && new Date(accessCode.expiredAt) < new Date()) {
       // Cập nhật trạng thái nếu đã hết hạn
       await accessCode.update({ status: 'expired' });
       
@@ -589,10 +589,10 @@ exports.verifyAccessCode = async (req, res, next) => {
       let timeRemaining = null;
       let timeRemainingMessage = null;
       
-      if (accessCode.expiresAt) {
+      if (accessCode.expiredAt) {
         const now = new Date();
-        const expiresAt = new Date(accessCode.expiresAt);
-        const diffMs = expiresAt.getTime() - now.getTime();
+        const expiredAt = new Date(accessCode.expiredAt);
+        const diffMs = expiredAt.getTime() - now.getTime();
         
         if (diffMs > 0) {
           const days = Math.floor(diffMs / (1000 * 60 * 60 * 24));
@@ -625,7 +625,7 @@ exports.verifyAccessCode = async (req, res, next) => {
         data: {
           code: accessCode.code,
           status: accessCode.status,
-          expiresAt: accessCode.expiresAt,
+          expiredAt: accessCode.expiredAt,
           usedCount: accessCode.usedCount || 0,
           maxUses: accessCode.maxUses || 0,
           match: accessCode.match,

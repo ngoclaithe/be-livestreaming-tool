@@ -64,7 +64,7 @@ router.use(protect);
  * @desc    Tạo mới access code
  * @access  Private
  * @body    {string} [matchId] - ID của trận đấu (nếu có)
- * @body    {string} [expiresAt] - Ngày hết hạn (ISO string)
+ * @body    {string} [expiredAt] - Ngày hết hạn (ISO string)
  * @body    {number} [maxUses=1] - Số lần sử dụng tối đa
  * @body    {object} [metadata] - Thông tin bổ sung
  */
@@ -96,7 +96,7 @@ router.get('/:code', accessCodeController.getAccessCode);
  * @access  Private (chủ sở hữu hoặc admin)
  * @param   {string} id - ID của access code cần cập nhật
  * @body    {string} [status] - Trạng thái mới
- * @body    {string} [expiresAt] - Ngày hết hạn mới (ISO string)
+ * @body    {string} [expiredAt] - Ngày hết hạn mới (ISO string)
  * @body    {number} [maxUses] - Số lần sử dụng tối đa mới
  * @body    {object} [metadata] - Thông tin bổ sung
  */

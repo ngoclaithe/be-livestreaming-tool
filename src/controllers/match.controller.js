@@ -105,8 +105,8 @@ exports.getMatchByAccessCode = async (req, res, next) => {
         code,
         status: 'active',
         [Op.or]: [
-          { expiresAt: null },
-          { expiresAt: { [Op.gt]: new Date() } }
+          { expiredAt: null },
+          { expiredAt: { [Op.gt]: new Date() } }
         ]
       },
       include: [

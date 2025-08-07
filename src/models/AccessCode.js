@@ -17,7 +17,7 @@ const AccessCode = sequelize.define('AccessCode', {
     defaultValue: 'active',
     allowNull: false,
   },
-  expiresAt: {
+  expiredAt: {
     type: DataTypes.DATE,
     allowNull: true,
   },
@@ -103,7 +103,7 @@ const AccessCode = sequelize.define('AccessCode', {
       fields: ['matchId'],
     },
     {
-      fields: ['expiresAt'],
+      fields: ['expiredAt'],
     },
   ],
 });
@@ -136,7 +136,7 @@ AccessCode.generateCode = function(typeMatch = 'soccer') {
 
 // Check if access code is expired
 AccessCode.prototype.isExpired = function() {
-  return this.expiresAt && new Date() > new Date(this.expiresAt);
+  return this.expiredAt && new Date() > new Date(this.expiredAt);
 };
 
 // Check if access code is active
@@ -172,7 +172,7 @@ AccessCode.prototype.revoke = async function(userId) {
 AccessCode.prototype.setExpiry = async function(days) {
   const expiryDate = new Date();
   expiryDate.setDate(expiryDate.getDate() + (days || 30)); 
-  this.expiresAt = expiryDate;
+  this.expiredAt = expiryDate;
   return this.save();
 };
 

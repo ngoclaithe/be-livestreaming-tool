@@ -61,7 +61,7 @@ exports.getUser = async (req, res, next) => {
         },
         {
           association: 'accessCodes',
-          attributes: ['id', 'code', 'status', 'expiresAt', 'createdAt']
+          attributes: ['id', 'code', 'status', 'expiredAt', 'createdAt']
         },
         {
           association: 'logos',
