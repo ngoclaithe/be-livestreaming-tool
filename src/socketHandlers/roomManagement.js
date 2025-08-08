@@ -118,7 +118,7 @@ async function loadRoomData(accessCode) {
         stadium: match.venue || match.location || "",
         matchDate: match.matchDate,
         status: match.status,
-        typeMatch: match.typeMatch, // Lấy typeMatch từ database
+        typeMatch: match.typeMatch, 
         matchTitle: match.match_title,
         referee: match.referee,
         attendance: match.attendance,
@@ -577,6 +577,18 @@ function handleRoomManagement(io, socket, rooms, userSessions) {
 
         socket.to(`room_${accessCode}`).emit('client_joined', clientJoinedData);
       }
+
+      console.log('=== ROOM_JOINED EVENT DATA ===');
+      console.log('Room:', accessCode);
+      console.log('Client Type:', clientType);
+      console.log('Socket ID:', socket.id);
+      console.log('Room State:', {
+        matchData: room.currentState.matchData,
+        displaySettings: room.currentState.displaySettings,
+        view: room.currentState.view,
+        timestamp: new Date().toISOString()
+      });
+      console.log('=============================');
 
       logger.info(`Client ${socket.id} joined room ${accessCode} as ${clientType}. Total clients: ${room.clients.size + room.adminClients.size}. TypeMatch: ${room.currentState.matchData.typeMatch}`);
 
