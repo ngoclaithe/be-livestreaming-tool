@@ -153,6 +153,7 @@ function mergeRoomDataWithState(roomState, loadedData) {
       teamA: {
         name: match.teamA.name,
         score: match.teamA.score,
+        scoreSet: match.teamA.scoreSet || 0,
         logo: match.teamA.logo,
         teamAKitColor: match.teamA.kitColor,    
         teamA2KitColor: match.teamA.kit2Color   
@@ -160,6 +161,7 @@ function mergeRoomDataWithState(roomState, loadedData) {
       teamB: {
         name: match.teamB.name,
         score: match.teamB.score,
+        scoreSet: match.teamB.scoreSet || 0,
         logo: match.teamB.logo,
         teamBKitColor: match.teamB.kitColor,    
         teamB2KitColor: match.teamB.kit2Color   
