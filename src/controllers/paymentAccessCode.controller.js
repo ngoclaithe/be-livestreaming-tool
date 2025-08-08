@@ -271,7 +271,6 @@ exports.getPaymentRequest = async (req, res, next) => {
     return next(error);
   }
 };
-
 exports.approvePaymentRequest = async (req, res, next) => {
   const t = await sequelize.transaction();
   
@@ -290,12 +289,29 @@ exports.approvePaymentRequest = async (req, res, next) => {
       return next(new ApiError('Không tìm thấy yêu cầu thanh toán', StatusCodes.NOT_FOUND));
     }
 
+    // Tìm AccessCode liên quan
+    const accessCode = await AccessCode.findOne({
+      where: { code: paymentRequest.access_code }
+    }, { transaction: t });
+
+    if (!accessCode) {
+      await t.rollback();
+      return next(new ApiError('Không tìm thấy mã truy cập', StatusCodes.NOT_FOUND));
+    }
+
+    // Approve payment request
     await paymentRequest.approve(req.user.id);
+    
+    // Chuyển status của AccessCode thành active
+    await accessCode.update({ 
+      status: 'active' 
+    }, { transaction: t });
+
     await t.commit();
 
     return res.status(StatusCodes.OK).json({
       success: true,
-      message: 'Yêu cầu thanh toán đã được duyệt thành công',
+      message: 'Yêu cầu thanh toán đã được duyệt thành công và mã truy cập đã được kích hoạt',
       data: paymentRequest
     });
   } catch (error) {
@@ -334,12 +350,23 @@ exports.cancelPaymentRequest = async (req, res, next) => {
       return next(new ApiError('Vui lòng cung cấp lý do hủy', StatusCodes.BAD_REQUEST));
     }
 
+    // Tìm và xóa AccessCode liên quan
+    const accessCode = await AccessCode.findOne({
+      where: { code: paymentRequest.access_code }
+    }, { transaction: t });
+
+    if (accessCode) {
+      await accessCode.destroy({ transaction: t });
+    }
+
+    // Cancel payment request
     await paymentRequest.cancel(req.user.id, reason);
+
     await t.commit();
 
     return res.status(StatusCodes.OK).json({
       success: true,
-      message: 'Yêu cầu thanh toán đã được hủy',
+      message: 'Yêu cầu thanh toán đã được hủy và mã truy cập đã được xóa',
       data: paymentRequest
     });
   } catch (error) {
