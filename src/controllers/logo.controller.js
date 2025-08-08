@@ -28,16 +28,14 @@ exports.uploadLogo = async (req, res, next) => {
 
     const { type = 'logo', name } = req.body;
     const logoType = type === 'banner' ? 'banner' : 'logo';
-    const logoName = name || logoType; // Default to logo/banner type if name not provided
+    const logoName = name || logoType; 
 
     const code = await Logo.generateUniqueCode(logoType, t);
     console.log('✅ [Logo Controller] Generated code:', code);
 
-    // Get client IP address
     const uploaderIp = req.headers['x-forwarded-for'] || req.connection.remoteAddress;
     console.log('🌐 Uploader IP:', uploaderIp);
 
-    // Get file size information
     const { size: fileSize, sizeReadable: fileSizeReadable } = await getFileSize(req.file.path);
 
     const logo = await Logo.create({
@@ -114,14 +112,12 @@ exports.getLogos = async (req, res, next) => {
       };
     }
 
-    // Track the request for each logo
     const logos = await Logo.findAll({
       where: filter,
       order: [['createdAt', 'DESC']],
       attributes: ['id', 'code_logo', 'type_logo', 'name', 'url_logo', 'createdAt', 'file_size', 'file_size_readable', 'request_count', 'last_requested']
     });
 
-    // Update last_requested and request_count for each logo
     await Promise.all(logos.map(logo => logo.trackRequest()));
     
     return res.status(StatusCodes.OK).json({
@@ -174,7 +170,6 @@ exports.getLogoByCode = async (req, res, next) => {
       });
     }
 
-    // Partial search
     const logos = await Logo.findAll({
       where: {
         code_logo: {
@@ -264,7 +259,6 @@ exports.updateLogo = async (req, res, next) => {
       }
     }
 
-    // Update type if provided
     if (type) {
       const validTypes = ['logo', 'banner'];
       if (!validTypes.includes(type)) {
@@ -273,15 +267,13 @@ exports.updateLogo = async (req, res, next) => {
       }
       logo.type_logo = type;
       
-      // If name wasn't explicitly set before, update it to match the new type
       if (!logo.name || logo.name === logo.type_logo) {
         logo.name = type;
       }
     }
     
-    // Update name if provided, or set to type if empty
     if (name !== undefined) {
-      logo.name = name || logo.type_logo; // If empty string is provided, use type
+      logo.name = name || logo.type_logo; 
     }
 
     await logo.save({ transaction: t });

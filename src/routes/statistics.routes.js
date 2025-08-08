@@ -7,7 +7,7 @@ const {
   getActiveRoomSessionsCount,
   getStatisticsSummary
 } = require('../controllers/statistics.controller');
-const { protect, authorize } = require('../middleware/auth');
+const { protect, authorize } = require('../middleware/auth.middleware');
 
 // All routes are protected and require admin role
 router.use(protect);

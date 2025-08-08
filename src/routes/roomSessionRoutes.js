@@ -4,7 +4,12 @@ const {
     getAllRoomSessions,
     getRoomSessionById,
     getRoomSessionByAccessCode,
-    getActiveRoomSessions
+    getActiveRoomSessions,
+    deleteRoom,
+    disconnectClient,
+    deleteExpiredRooms,
+    debugRoomConnections,
+    forceCleanupRoom
 } = require('../controllers/roomSessionController');
 
 /**
@@ -34,5 +39,41 @@ router.get('/access-code/:code', getRoomSessionByAccessCode);
  * @access  Public
  */
 router.get('/:id', getRoomSessionById);
+
+/**
+ * @route   DELETE /api/room-sessions/:id
+ * @desc    Xóa một phòng theo ID
+ * @access  Private/Admin
+ */
+router.delete('/:id', deleteRoom);
+
+/**
+ * @route   POST /api/room-sessions/disconnect-client
+ * @desc    Ngắt kết nối với client theo ID
+ * @body    {string} clientId - ID của client cần ngắt kết nối
+ * @access  Private/Admin
+ */
+router.post('/disconnect-client', disconnectClient);
+
+/**
+ * @route   DELETE /api/room-sessions/expired
+ * @desc    Xóa tất cả các phòng đã hết hạn
+ * @access  Private/Admin
+ */
+router.delete('/expired', deleteExpiredRooms);
+
+/**
+ * @route   GET /api/room-sessions/debug/:accessCode
+ * @desc    Kiểm tra trạng thái kết nối của một phòng (dành cho debug)
+ * @access  Private/Admin
+ */
+router.get('/debug/:accessCode', debugRoomConnections);
+
+/**
+ * @route   POST /api/room-sessions/force-cleanup/:accessCode
+ * @desc    Dọn dẹp cưỡng chế một phòng (chỉ dùng khi cần thiết)
+ * @access  Private/Admin
+ */
+router.post('/force-cleanup/:accessCode', forceCleanupRoom);
 
 module.exports = router;

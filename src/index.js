@@ -191,7 +191,7 @@ app.get('/health', (req, res) => {
   });
 });
 
-let authRoutes, userRoutes, logoRoutes, accessCodeRoutes, displaySettingRoutes;
+let authRoutes, userRoutes, logoRoutes, accessCodeRoutes, displaySettingRoutes, roomSessionRoutes, paymentAccessCodeRoutes, infoPaymentRoutes, activitiesRoutes, statisticsRoutes;
 
 try {
   authRoutes = require('./routes/auth.routes');
@@ -202,6 +202,7 @@ try {
   roomSessionRoutes = require('./routes/roomSessionRoutes');
   paymentAccessCodeRoutes = require('./routes/paymentAccessCode.routes');
   infoPaymentRoutes = require('./routes/infoPayment.routes');
+  activitiesRoutes = require('./routes/activities.routes');
   statisticsRoutes = require('./routes/statistics.routes');
 } catch (error) {
   logger.error('Error importing routes:', error);
@@ -222,6 +223,7 @@ app.use('/api/v1/room-sessions', roomSessionRoutes);
 app.use('/api/v1/payment-access-codes', paymentAccessCodeRoutes);
 app.use('/api/v1/info-payments', infoPaymentRoutes);
 app.use('/api/v1/statistics', statisticsRoutes);
+app.use('/api/v1/activities', activitiesRoutes);
 
 app.get('/', (req, res) => {
   res.status(200).json({

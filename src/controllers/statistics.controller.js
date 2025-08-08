@@ -14,6 +14,7 @@ const getTotalAccessCodes = async (req, res) => {
         total: count
       }
     });
+    console.log("Giá trị count là:", count);
   } catch (error) {
     console.error('Error getting total access codes:', error);
     res.status(500).json({
