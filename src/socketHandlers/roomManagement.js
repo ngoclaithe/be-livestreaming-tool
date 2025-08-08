@@ -565,7 +565,7 @@ function handleRoomManagement(io, socket, rooms, userSessions) {
         isAdmin: clientType === 'admin',
         expiredAt: roomSession.expiredAt,
         dataSynced: accessCodeData.status === 'active' || accessCodeData.status === 'used',
-        typeMatch: room.currentState.matchData.typeMatch // Thêm typeMatch vào response
+        typeMatch: room.currentState.matchData.typeMatch 
       };
 
       socket.emit('room_joined', response);

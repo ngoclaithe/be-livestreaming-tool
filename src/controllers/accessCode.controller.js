@@ -27,8 +27,8 @@ exports.createAccessCode = async (req, res, next) => {
     const match = await Match.create({
       teamAName: 'Team A',
       teamBName: 'Team B',
-      teamALogo: '/images/default-team-logo.png',
-      teamBLogo: '/images/default-team-logo.png',
+      teamALogo: '/uploads/default-team-logo.png',
+      teamBLogo: '/uploads/default-team-logo.png',
       tournamentName: '',
       tournamentLogo: '',
       typeMatch,

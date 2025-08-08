@@ -82,7 +82,6 @@ async function updateMatchInfo(accessCode, matchInfo) {
 
 async function updateDisplaySettings(accessCode, type, items) {
   try {
-    const displaySettings = [];
     const codeLogos = Array.isArray(items.code_logo) ? items.code_logo : [];
     const urlLogos = Array.isArray(items.url_logo) ? items.url_logo : [];
     const positions = Array.isArray(items.position) ? items.position : [];
@@ -95,39 +94,68 @@ async function updateDisplaySettings(accessCode, type, items) {
       typeDisplays.length
     );
 
+    console.log('🔄 Bắt đầu xử lý dữ liệu...');
+    
+    // Tạo mảng để lưu các promise cập nhật
+    const updatePromises = [];
+    
     for (let i = 0; i < maxLength; i++) {
-      if (codeLogos[i] && urlLogos[i] && positions[i]) {
-        const processedUrlLogo = cleanLogoUrl(urlLogos[i]);
+      const codeLogo = codeLogos[i];
+      const urlLogo = urlLogos[i];
+      const position = positions[i] || 0;
+      // Đảm bảo type_display luôn là 'logo' cho tournament_logo
+      const typeDisplay = type === 'tournament_logo' ? 'logo' : (typeDisplays[i] || 'default');
 
-        const existingRecord = await DisplaySetting.findOne({
-          where: {
-            accessCode,
-            code_logo: codeLogos[i],
-            type: type
+      console.log(`\n🔍 Xử lý item ${i + 1}/${maxLength}:`);
+      console.log(`- code_logo: ${codeLogo}`);
+      console.log(`- url_logo: ${urlLogo}`);
+      console.log(`- position: ${position}`);
+      console.log(`- type_display: ${typeDisplay}`);
+
+      if (codeLogo && urlLogo) {
+        const processedUrlLogo = cleanLogoUrl(urlLogo);
+        
+        // Tạo đối tượng dữ liệu để cập nhật
+        const updateData = {
+          accessCode,
+          type,
+          code_logo: codeLogo,
+          url_logo: processedUrlLogo,
+          position: position,
+          type_display: typeDisplay,
+          data: {}
+        };
+        
+        // Thêm các trường dữ liệu tùy chọn
+        const fields = ['code_logo', 'url_logo', 'position', 'type_display'];
+        fields.forEach(field => {
+          if (items[field] !== undefined) {
+            console.log(`   - Cập nhật ${field}: ${JSON.stringify(items[field])}`);
+            updateData.data[field] = items[field];
           }
         });
-
-        if (!existingRecord) {
-          displaySettings.push({
-            type: type,
-            code_logo: codeLogos[i],
-            position: positions[i],
-            url_logo: processedUrlLogo,
-            type_display: typeDisplays[i] || 'default',
-            accessCode: accessCode
-          });
-        } else {
-          if (existingRecord.url_logo !== processedUrlLogo) {
-            await existingRecord.update({ url_logo: processedUrlLogo });
-          }
-        }
+        
+        // Sử dụng upsert để cập nhật hoặc tạo mới
+        console.log('💾 Đang cập nhật hoặc tạo mới bản ghi...');
+        const promise = DisplaySetting.upsert(updateData, {
+          where: {
+            accessCode,
+            type,
+            code_logo: codeLogo
+          },
+          returning: true
+        });
+        
+        updatePromises.push(promise);
       }
     }
-
-    if (displaySettings.length > 0) {
-      await DisplaySetting.bulkCreate(displaySettings);
+    
+    // Chờ tất cả các thao tác cập nhật hoàn thành
+    if (updatePromises.length > 0) {
+      const results = await Promise.all(updatePromises);
+      console.log(`✅ Đã cập nhật thành công ${results.length} bản ghi`);
     } else {
-      console.log('ℹ️ Không có bản ghi mới nào được thêm vào');
+      console.log('ℹ️ Không có dữ liệu nào cần cập nhật');
     }
 
     return true;
@@ -509,14 +537,14 @@ function handleDisplaySettings(io, socket, rooms, userSessions) {
 
   // Tournament logo update
   socket.on('tournament_logo_update', async (data) => {
-    console.log('📨 Received tournament_logo_update:', data);
+    console.log('📨 Received tournament_logo_update:', JSON.stringify(data, null, 2));
 
     try {
-      // Handle both tournament_logo and tournamentLogo property names
       const { accessCode, tournament_logo, tournamentLogo, timestamp = Date.now() } = data;
       const tournamentLogoData = tournament_logo || tournamentLogo;
 
       if (!accessCode || !tournamentLogoData) {
+        console.error('❌ Lỗi: Thiếu accessCode hoặc tournamentLogoData');
         throw new Error('Access code and tournament logo data are required');
       }
 
@@ -543,10 +571,10 @@ function handleDisplaySettings(io, socket, rooms, userSessions) {
         };
       }
 
-      // Update each field if provided
       const fields = ['code_logo', 'url_logo', 'position', 'type_display'];
       fields.forEach(field => {
         if (tournamentLogoData[field] !== undefined) {
+          console.log(`   - Cập nhật ${field}: ${JSON.stringify(tournamentLogoData[field])}`);
           room.currentState.tournament_logo[field] = Array.isArray(tournamentLogoData[field])
             ? [...tournamentLogoData[field]]
             : [];
@@ -555,9 +583,7 @@ function handleDisplaySettings(io, socket, rooms, userSessions) {
 
       room.lastActivity = timestamp;
 
-      // Xử lý dựa trên behavior
       if (behavior === 'remove') {
-        // Xóa khỏi database
         try {
           await DisplaySetting.destroy({
             where: {

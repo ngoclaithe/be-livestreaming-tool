@@ -22,13 +22,13 @@ const Match = sequelize.define('Match', {
   teamALogo: {
     type: DataTypes.TEXT,
     allowNull: true,
-    defaultValue: '/images/default-team-logo.png',
+    defaultValue: '/uploads/default-team-logo.png',
     comment: 'Team A logo URL',
   },
   teamBLogo: {
     type: DataTypes.TEXT,
     allowNull: true,
-    defaultValue: '/images/default-team-logo.png',
+    defaultValue: '/uploads/default-team-logo.png',
     comment: 'Team B logo URL',
   },
   tournamentName: {
