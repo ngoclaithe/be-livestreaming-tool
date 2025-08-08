@@ -746,6 +746,84 @@ function handleMatchData(io, socket, rooms, userSessions) {
             });
         }
     });
-}
+
+    // Handle team score set update
+    socket.on('team_score_set_update', async (data) => {
+        try {
+            const { accessCode, teamAScoreSet, teamBScoreSet } = data;
+
+            // Validate input
+            if (!accessCode) {
+                throw new Error('Mã truy cập không hợp lệ');
+            }
+
+            // Get room and validate
+            const room = rooms.get(accessCode);
+            if (!room) {
+                logger.error(`Room not found for access code: ${accessCode}`, { socketId: socket.id });
+                return socket.emit('match_update_error', {
+                    error: 'Không tìm thấy phòng. Vui lòng thử lại sau khi tham gia phòng.',
+                    code: 'ROOM_NOT_FOUND',
+                    timestamp: Date.now()
+                });
+            }
+
+            // Verify admin permission
+            const userData = userSessions.get(socket.id);
+            if (!userData || !room.adminClients.has(socket.id)) {
+                return socket.emit('match_update_error', {
+                    error: 'Bạn không có quyền cập nhật tỷ số set',
+                    code: 'UNAUTHORIZED',
+                    timestamp: Date.now()
+                });
+            }
+
+            // Update room state
+            if (typeof teamAScoreSet === 'number') {
+                room.currentState.matchData.teamA.scoreSet = teamAScoreSet;
+            }
+            if (typeof teamBScoreSet === 'number') {
+                room.currentState.matchData.teamB.scoreSet = teamBScoreSet;
+            }
+
+            // Update in database
+            const updateData = {};
+            if (typeof teamAScoreSet === 'number') {
+                updateData.teamAScoreSet = teamAScoreSet;
+            }
+            if (typeof teamBScoreSet === 'number') {
+                updateData.teamBScoreSet = teamBScoreSet;
+            }
+
+            if (Object.keys(updateData).length > 0) {
+                const result = await updateMatchInDatabase(accessCode, updateData);
+                if (!result.success) {
+                    throw new Error(result.error || 'Không thể cập nhật tỷ số set');
+                }
+            }
+
+            // Broadcast to all clients in the room
+            io.to(`room_${accessCode}`).emit('team_score_set_updated', {
+                teamAScoreSet: room.currentState.matchData.teamA.scoreSet,
+                teamBScoreSet: room.currentState.matchData.teamB.scoreSet,
+                timestamp: Date.now()
+            });
+
+        } catch (error) {
+            logger.error(`Team score set update error: ${error.message}`, {
+                error: error.toString(),
+                stack: error.stack,
+                socketId: socket.id,
+                data: data
+            });
+
+            socket.emit('match_update_error', {
+                error: error.message || 'Đã xảy ra lỗi khi cập nhật tỷ số set',
+                code: error.code || 'UPDATE_ERROR',
+                timestamp: Date.now()
+            });
+        }
+    });
+};
 
 module.exports = { handleMatchData };

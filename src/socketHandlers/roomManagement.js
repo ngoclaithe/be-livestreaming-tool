@@ -24,8 +24,8 @@ function createNewRoom(accessCode) {
     currentState: {
       view: 'poster',
       matchData: {
-        teamA: { name: "ĐỘI A", score: 0, logo: null },
-        teamB: { name: "ĐỘI B", score: 0, logo: null },
+        teamA: { name: "ĐỘI A", score: 0, scoreSet: 0, logo: null },
+        teamB: { name: "ĐỘI B", score: 0, scoreSet: 0, logo: null },
         matchTime: "00:00",
         period: "Chưa bắt đầu",
         status: "waiting",
@@ -100,6 +100,7 @@ async function loadRoomData(accessCode) {
         teamA: {
           name: match.teamAName,
           score: match.homeScore,
+          scoreSet: match.teamAScoreSet || 0,
           logo: match.teamALogo,
           kitColor: match.teamAkitcolor,
           kit2Color: match.teamA2kitcolor
@@ -107,6 +108,7 @@ async function loadRoomData(accessCode) {
         teamB: {
           name: match.teamBName,
           score: match.awayScore,
+          scoreSet: match.teamBScoreSet || 0,
           logo: match.teamBLogo,
           kitColor: match.teamBkitcolor,
           kit2Color: match.teamB2kitcolor

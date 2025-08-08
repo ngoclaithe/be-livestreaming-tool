@@ -69,6 +69,18 @@ const Match = sequelize.define('Match', {
     defaultValue: 0,
     allowNull: false,
   },
+  teamAScoreSet: {
+    type: DataTypes.INTEGER,
+    defaultValue: 0,
+    allowNull: false,
+    comment: 'Number of sets won by Team A',
+  },
+  teamBScoreSet: {
+    type: DataTypes.INTEGER,
+    defaultValue: 0,
+    allowNull: false,
+    comment: 'Number of sets won by Team B',
+  },
   // Match statistics
   possession: {
     type: DataTypes.JSON,
@@ -249,7 +261,6 @@ Match.prototype.updateShotsOnTarget = function(home, away) {
   return this.save();
 };
 
-// Class methods (static methods)
 Match.getLiveMatches = function() {
   return this.findAll({
     where: {
