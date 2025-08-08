@@ -670,7 +670,6 @@ function handleMatchData(io, socket, rooms, userSessions) {
                 throw new Error('Room not found');
             }
 
-            // Update room state - only update provided marquee data
             Object.keys(marqueeData).forEach(key => {
                 if (room.currentState.marqueeData[key] !== undefined) {
                     room.currentState.marqueeData[key] = marqueeData[key];
@@ -678,7 +677,6 @@ function handleMatchData(io, socket, rooms, userSessions) {
             });
             room.lastActivity = timestamp;
 
-            // Broadcast to all clients in the room
             io.to(`room_${accessCode}`).emit('marquee_updated', {
                 marqueeData: room.currentState.marqueeData,
                 timestamp: timestamp
