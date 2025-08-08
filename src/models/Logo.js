@@ -50,6 +50,27 @@ const Logo = sequelize.define('Logo', {
     allowNull: false,
     comment: 'IP address of the uploader',
   },
+  file_size: {
+    type: DataTypes.BIGINT,
+    allowNull: true,
+    comment: 'File size in bytes',
+  },
+  file_size_readable: {
+    type: DataTypes.STRING(20),
+    allowNull: true,
+    comment: 'Human-readable file size (e.g., 1.2 MB)',
+  },
+  request_count: {
+    type: DataTypes.INTEGER,
+    defaultValue: 0,
+    allowNull: false,
+    comment: 'Number of times this logo has been requested',
+  },
+  last_requested: {
+    type: DataTypes.DATE,
+    allowNull: true,
+    comment: 'Last time this logo was requested',
+  },
 }, {
   timestamps: true,
   tableName: 'Logos',
@@ -68,22 +89,19 @@ const Logo = sequelize.define('Logo', {
   ],
 });
 
-// Generate a 5-character code with L/B prefix followed by 4 digits
 Logo.generateUniqueCode = async function(type = 'logo', transaction = null) {
   const prefix = type === 'banner' ? 'B' : 'L';
   const maxAttempts = 50;
   
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
-    // Generate 4 random digits (0-9)
     let randomPart = '';
     for (let i = 0; i < 4; i++) {
       randomPart += Math.floor(Math.random() * 10);
     }
     
-    const code = `${prefix}${randomPart}`; // Total 5 characters (1 letter + 4 digits)
+    const code = `${prefix}${randomPart}`; 
     
     try {
-      // Check if code already exists
       const existingLogo = await this.findOne({
         where: { code_logo: code },
         transaction,
@@ -100,7 +118,6 @@ Logo.generateUniqueCode = async function(type = 'logo', transaction = null) {
   throw new Error(`Unable to generate unique ${type} code after ${maxAttempts} attempts`);
 };
 
-// Add class method for finding by code
 Logo.findByCode = async function(code) {
   return this.findOne({ 
     where: { code_logo: code },
@@ -108,31 +125,51 @@ Logo.findByCode = async function(code) {
   });
 };
 
-// Add instance method to get public URL
 Logo.prototype.getPublicUrl = function() {
   if (!this.url_logo) return null;
   
-  // If it's already a full URL, return as is
   if (this.url_logo.startsWith('http')) {
     return this.url_logo;
   }
   
-  // Otherwise, construct the full URL
-  const config = require('../config');
-  const baseUrl = config.app?.url || `http://${config.host}:${config.port || 5000}`;
-  return `${baseUrl}${this.url_logo.startsWith('/') ? '' : '/'}${this.url_logo}`;
-};
+  const baseUrl = process.env.BASE_URL || 'http://localhost:5000';
+  return `${baseUrl}${this.url_logo}`;
+}
 
-// Add instance method to get public data
+/**
+ * Track that this logo was requested
+ * @returns {Promise<Logo>} The updated logo instance
+ */
+Logo.prototype.trackRequest = async function() {
+  this.request_count = (this.request_count || 0) + 1;
+  this.last_requested = new Date();
+  return this.save();
+}
+
+/**
+ * Get logo usage information
+ * @returns {Object} Usage information
+ */
+Logo.prototype.getUsageInfo = function() {
+  const { formatFileSize, getUsageLevel } = require('../utils/fileUtils');
+  
+  return {
+    requestCount: this.request_count || 0,
+    lastRequested: this.last_requested,
+    fileSize: this.file_size,
+    fileSizeReadable: this.file_size_readable || formatFileSize(this.file_size || 0),
+    usageLevel: getUsageLevel(this.last_requested, this.createdAt, this.request_count || 0)
+  };
+}
+
 Logo.prototype.toJSON = function() {
   const values = Object.assign({}, this.get());
   
-  // Always include the public URL
   values.public_url = this.getPublicUrl();
   
-  // Remove sensitive/internal fields
+  values.usage = this.getUsageInfo();
+  
   delete values.file_path;
-  // NOTE: Keep user_id for internal usage, remove only in public APIs
   
   return values;
 };

@@ -5,6 +5,7 @@ const logger = require('../utils/logger');
 const { deleteFile } = require('../middleware/localUpload');
 const { sequelize } = require('../config/database');
 const { Op } = require('sequelize');
+const { getFileSize } = require('../utils/fileUtils');
 
 /**
  * @desc    Upload a new logo
@@ -36,13 +37,18 @@ exports.uploadLogo = async (req, res, next) => {
     const uploaderIp = req.headers['x-forwarded-for'] || req.connection.remoteAddress;
     console.log('🌐 Uploader IP:', uploaderIp);
 
+    // Get file size information
+    const { size: fileSize, sizeReadable: fileSizeReadable } = await getFileSize(req.file.path);
+
     const logo = await Logo.create({
       code_logo: code,
       type_logo: logoType,
       name: logoName,
       url_logo: req.file.fileUrl,
       file_path: req.file.path,
-      uploader_ip: uploaderIp
+      uploader_ip: uploaderIp,
+      file_size: fileSize,
+      file_size_readable: fileSizeReadable
     }, { transaction: t });
 
     await t.commit();
@@ -54,6 +60,7 @@ exports.uploadLogo = async (req, res, next) => {
         id: logo.id,
         code_logo: logo.code_logo,
         type_logo: logo.type_logo,
+        name: logo.name,
         url_logo: logo.url_logo,
         created_at: logo.createdAt,
         public_url: logo.getPublicUrl()
@@ -107,19 +114,20 @@ exports.getLogos = async (req, res, next) => {
       };
     }
 
+    // Track the request for each logo
     const logos = await Logo.findAll({
       where: filter,
       order: [['createdAt', 'DESC']],
-      attributes: ['id', 'code_logo', 'type_logo', 'url_logo', 'createdAt']
+      attributes: ['id', 'code_logo', 'type_logo', 'name', 'url_logo', 'createdAt', 'file_size', 'file_size_readable', 'request_count', 'last_requested']
     });
 
+    // Update last_requested and request_count for each logo
+    await Promise.all(logos.map(logo => logo.trackRequest()));
+    
     return res.status(StatusCodes.OK).json({
       success: true,
       count: logos.length,
-      data: logos.map(logo => ({
-        ...logo.get({ plain: true }),
-        public_url: logo.getPublicUrl()
-      }))
+      data: logos.map(logo => logo.get({ plain: true }))
     });
   } catch (error) {
     logger.error(`Get logos error: ${error.message}`);
