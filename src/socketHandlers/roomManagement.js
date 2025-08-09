@@ -269,7 +269,7 @@ async function handleRoomExpiration(io, accessCode, rooms) {
 
     const sockets = await io.in(`room_${accessCode}`).fetchSockets();
     console.log(`Tìm thấy ${sockets.length} kết nối trong phòng ${accessCode} sẽ bị ngắt`);
-    
+
     for (const socket of sockets) {
       console.log(`Đang ngắt kết nối socket ID: ${socket.id} trong phòng ${accessCode}`);
       socket.leave(`room_${accessCode}`);
@@ -301,6 +301,7 @@ function initializeGlobalExpirationChecker(io, rooms) {
     clearInterval(globalExpirationChecker);
   }
 
+  // THAY ĐỔI: Giảm từ 30 phút xuống 5 phút (5 * 60 * 1000 = 300000ms)
   globalExpirationChecker = setInterval(async () => {
     try {
       const now = new Date();
@@ -317,7 +318,7 @@ function initializeGlobalExpirationChecker(io, rooms) {
     } catch (error) {
       logger.error('Error in global expiration checker:', error);
     }
-  }, 30 * 60 * 1000); 
+  }, 5 * 60 * 1000); // THAY ĐỔI: 5 phút thay vì 30 phút
 }
 
 async function checkRoomExpirationOnActivity(accessCode) {
@@ -473,32 +474,42 @@ function handleRoomManagement(io, socket, rooms, userSessions) {
             updateData.displayConnected = [...roomSession.displayConnected, socket.id];
 
             const currentDisplayCount = roomSession.displayConnected.length;
-            if (currentDisplayCount === 0) {
+            // THAY ĐỔI: Kiểm tra expiredAt trước khi update
+            if (currentDisplayCount === 0 && roomSession.expiredAt === null) {
               isFirstDisplayConnection = true;
               const expiredAt = new Date();
               expiredAt.setHours(expiredAt.getHours() + 2);
               updateData.expiredAt = expiredAt;
               logger.info(`First display connected to existing room, setting expiredAt to: ${expiredAt}`);
-              
+
               scheduleRoomExpiration(io, accessCode, expiredAt, rooms);
-              
+
               try {
-                await AccessCode.update(
-                  {
-                    status: 'used',
-                    lastUsedAt: now,
-                    usageCount: sequelize.literal('"usageCount" + 1'),
-                    expiredAt: expiredAt
-                  },
-                  { where: { code: accessCode } }
-                );
-                logger.info(`AccessCode ${accessCode} marked as used with expiredAt: ${expiredAt} (existing room)`);
-                console.log("Giá trị của expiredAt là (existing room):", expiredAt);
+                // THAY ĐỔI: Chỉ update AccessCode nếu expiredAt chưa được set
+                const currentAccessCode = await AccessCode.findOne({ where: { code: accessCode } });
+                if (currentAccessCode && currentAccessCode.expiredAt === null) {
+                  await AccessCode.update(
+                    {
+                      status: 'used',
+                      lastUsedAt: now,
+                      usageCount: sequelize.literal('"usageCount" + 1'),
+                      expiredAt: expiredAt
+                    },
+                    { where: { code: accessCode } }
+                  );
+                  logger.info(`AccessCode ${accessCode} marked as used with expiredAt: ${expiredAt} (existing room)`);
+                  console.log("Giá trị của expiredAt là (existing room):", expiredAt);
+                } else {
+                  logger.info(`AccessCode ${accessCode} already has expiredAt set, skipping update`);
+                  console.log("AccessCode đã có expiredAt, không update:", currentAccessCode.expiredAt);
+                }
               } catch (updateError) {
                 logger.error(`ERROR updating AccessCode ${accessCode} (existing room):`, updateError);
               }
             } else if (roomSession.expiredAt) {
+              // Nếu đã có expiredAt, chỉ schedule lại timeout
               scheduleRoomExpiration(io, accessCode, roomSession.expiredAt, rooms);
+              logger.info(`Room ${accessCode} already has expiredAt: ${roomSession.expiredAt}, rescheduling timeout only`);
             }
           }
         }
@@ -594,7 +605,6 @@ function handleRoomManagement(io, socket, rooms, userSessions) {
 
       logger.info(`Client ${socket.id} joined room ${accessCode} as ${clientType}. Total clients: ${room.clients.size + room.adminClients.size}. TypeMatch: ${room.currentState.matchData.typeMatch}`);
 
-
     } catch (error) {
       logger.error('Error in join_room:', error);
 
@@ -664,7 +674,6 @@ function handleRoomManagement(io, socket, rooms, userSessions) {
           logger.error('Error updating RoomSession on disconnect:', error);
         }
       }
-
 
       if (room.clients.size === 0 && room.adminClients.size === 0 && room.displayClients.size === 0) {
         try {
