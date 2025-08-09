@@ -612,7 +612,6 @@ const deleteExpiredRooms = async (req, res) => {
         });
     }
 };
-
 /**
  * Lấy lịch sử các phòng đã hết hạn (10 phòng gần nhất)
  * @route GET /api/room-sessions/history
@@ -630,12 +629,14 @@ const getHistoryMatches = async (req, res) => {
             include: [
                 {
                     association: 'accessCodeInfo',
-                    attributes: ['code', 'status', 'expiredAt']
-                },
-                {
-                    model: DisplaySetting,
-                    as: 'displaySettings',
-                    attributes: ['id', 'type', 'code_logo', 'type_display', 'position', 'url_logo', 'metadata']
+                    attributes: ['code', 'status', 'expiredAt'],
+                    include: [
+                        {
+                            model: DisplaySetting,
+                            as: 'displaySettings',
+                            attributes: ['id', 'type', 'code_logo', 'type_display', 'position', 'url_logo', 'metadata']
+                        }
+                    ]
                 }
             ]
         });
@@ -646,7 +647,14 @@ const getHistoryMatches = async (req, res) => {
             accessCode: room.accessCode,
             status: room.status,
             expiredAt: room.expiredAt,
-            displaySettings: room.displaySettings || []
+            clientConnected: room.clientConnected || [],
+            displayConnected: room.displayConnected || [],
+            accessCodeInfo: room.accessCodeInfo ? {
+                code: room.accessCodeInfo.code,
+                status: room.accessCodeInfo.status,
+                expiredAt: room.accessCodeInfo.expiredAt,
+                displaySettings: room.accessCodeInfo.displaySettings || []
+            } : null
         }));
 
         res.json({
