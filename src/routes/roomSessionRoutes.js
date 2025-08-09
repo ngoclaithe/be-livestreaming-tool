@@ -9,7 +9,8 @@ const {
     disconnectClient,
     deleteExpiredRooms,
     debugRoomConnections,
-    forceCleanupRoom
+    forceCleanupRoom,
+    getHistoryMatches
 } = require('../controllers/roomSessionController');
 
 /**
@@ -25,6 +26,13 @@ router.get('/', getAllRoomSessions);
  * @access  Public
  */
 router.get('/active', getActiveRoomSessions);
+
+/**
+ * @route   GET /api/room-sessions/history
+ * @desc    Lấy lịch sử 10 phòng đã hết hạn gần nhất kèm cấu hình hiển thị
+ * @access  Public
+ */
+router.get('/history', getHistoryMatches);
 
 /**
  * @route   GET /api/room-sessions/access-code/:code

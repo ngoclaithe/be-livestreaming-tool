@@ -146,8 +146,8 @@ async function loadRoomData(accessCode) {
 function mergeRoomDataWithState(roomState, loadedData) {
   if (loadedData.match) {
     const match = loadedData.match;
-    console.log("giá trị khi load xong match là:", match);
-    console.log("typeMatch từ database:", match.typeMatch);
+    // console.log("giá trị khi load xong match là:", match);
+    // console.log("typeMatch từ database:", match.typeMatch);
 
     roomState.currentState.matchData = {
       teamA: {
@@ -580,17 +580,17 @@ function handleRoomManagement(io, socket, rooms, userSessions) {
         socket.to(`room_${accessCode}`).emit('client_joined', clientJoinedData);
       }
 
-      console.log('=== ROOM_JOINED EVENT DATA ===');
-      console.log('Room:', accessCode);
-      console.log('Client Type:', clientType);
-      console.log('Socket ID:', socket.id);
-      console.log('Room State:', {
-        matchData: room.currentState.matchData,
-        displaySettings: room.currentState.displaySettings,
-        view: room.currentState.view,
-        timestamp: new Date().toISOString()
-      });
-      console.log('=============================');
+      // console.log('=== ROOM_JOINED EVENT DATA ===');
+      // console.log('Room:', accessCode);
+      // console.log('Client Type:', clientType);
+      // console.log('Socket ID:', socket.id);
+      // console.log('Room State:', {
+      //   matchData: room.currentState.matchData,
+      //   displaySettings: room.currentState.displaySettings,
+      //   view: room.currentState.view,
+      //   timestamp: new Date().toISOString()
+      // });
+      // console.log('=============================');
 
       logger.info(`Client ${socket.id} joined room ${accessCode} as ${clientType}. Total clients: ${room.clients.size + room.adminClients.size}. TypeMatch: ${room.currentState.matchData.typeMatch}`);
 

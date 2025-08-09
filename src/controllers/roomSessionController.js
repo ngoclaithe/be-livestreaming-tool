@@ -1,4 +1,4 @@
-const { RoomSession, AccessCode } = require('../models');
+const { RoomSession, AccessCode, DisplaySetting } = require('../models');
 const logger = require('../utils/logger');
 
 /**
@@ -613,6 +613,57 @@ const deleteExpiredRooms = async (req, res) => {
     }
 };
 
+/**
+ * Lấy lịch sử các phòng đã hết hạn (10 phòng gần nhất)
+ * @route GET /api/room-sessions/history
+ * @access Public
+ */
+const getHistoryMatches = async (req, res) => {
+    try {
+        // Lấy 10 phòng gần nhất có status là 'expired'
+        const expiredRooms = await RoomSession.findAll({
+            where: {
+                status: 'expired'
+            },
+            order: [['expiredAt', 'DESC']],
+            limit: 10,
+            include: [
+                {
+                    association: 'accessCodeInfo',
+                    attributes: ['code', 'status', 'expiredAt']
+                },
+                {
+                    model: DisplaySetting,
+                    as: 'displaySettings',
+                    attributes: ['id', 'type', 'code_logo', 'type_display', 'position', 'url_logo', 'metadata']
+                }
+            ]
+        });
+
+        // Format lại dữ liệu trả về
+        const formattedRooms = expiredRooms.map(room => ({
+            id: room.id,
+            accessCode: room.accessCode,
+            status: room.status,
+            expiredAt: room.expiredAt,
+            displaySettings: room.displaySettings || []
+        }));
+
+        res.json({
+            success: true,
+            data: formattedRooms,
+            count: formattedRooms.length
+        });
+    } catch (error) {
+        console.error('Error fetching history matches:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Lỗi khi lấy lịch sử các trận đấu',
+            error: error.message
+        });
+    }
+};
+
 module.exports = {
     getAllRoomSessions,
     getRoomSessionById,
@@ -620,7 +671,8 @@ module.exports = {
     getActiveRoomSessions,
     deleteRoom,
     disconnectClient,
-    deleteExpiredRooms,
     debugRoomConnections,
-    forceCleanupRoom
+    forceCleanupRoom,
+    deleteExpiredRooms,
+    getHistoryMatches
 };

@@ -102,23 +102,34 @@ exports.login = async (req, res, next) => {
     next(error);
   }
 };
-
 // @desc    Get current logged in user
 // @route   GET /api/v1/auth/me
 // @access  Private
 exports.getMe = async (req, res, next) => {
   try {
-    const user = await User.findById(req.user.id);
-
+    // Nếu dùng Sequelize
+    const user = await User.findOne({
+      where: { 
+        id: req.user.id,
+        is_active: true  // Chỉ lấy user đang active
+      }
+    });
     if (!user) {
       return next(
-        new ApiError('Không tìm thấy người dùng', StatusCodes.NOT_FOUND)
+        new ApiError('Không tìm thấy người dùng hoặc tài khoản đã bị khóa', StatusCodes.NOT_FOUND)
       );
     }
 
     res.status(StatusCodes.OK).json({
       success: true,
-      data: user
+      data: {
+        id: user.id, 
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        avatar: user.avatar,
+        is_active: user.is_active
+      }
     });
   } catch (error) {
     logger.error(`Get me error: ${error.message}`);
