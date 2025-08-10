@@ -204,6 +204,7 @@ try {
   infoPaymentRoutes = require('./routes/infoPayment.routes');
   activitiesRoutes = require('./routes/activities.routes');
   statisticsRoutes = require('./routes/statistics.routes');
+  playerListRoutes = require('./routes/playerList.routes');
 } catch (error) {
   logger.error('Error importing routes:', error);
   process.exit(1);
@@ -224,6 +225,7 @@ app.use('/api/v1/payment-access-codes', paymentAccessCodeRoutes);
 app.use('/api/v1/info-payments', infoPaymentRoutes);
 app.use('/api/v1/statistics', statisticsRoutes);
 app.use('/api/v1/activities', activitiesRoutes);
+app.use('/api/v1/player-lists', playerListRoutes);
 
 app.get('/', (req, res) => {
   res.status(200).json({

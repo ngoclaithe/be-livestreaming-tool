@@ -307,6 +307,172 @@ function handleMatchData(io, socket, rooms, userSessions) {
         }
     });
 
+    socket.on('futsal_errors_update', (data) => {
+        try {
+            console.log('DEBUG - futsal_errors_update data received:', JSON.stringify(data, null, 2));
+            const { accessCode, futsalErrors, timestamp = Date.now() } = data;
+
+            // Validate input
+            if (!accessCode || !futsalErrors ) {
+                throw new Error('Mã truy cập và lỗi không hợp lệ');
+            }
+
+            // Get room and validate
+            const room = rooms.get(accessCode);
+            if (!room) {
+                console.log(`Room not found for access code: ${accessCode}`, { socketId: socket.id });
+            }
+
+            // Verify admin permission
+            const userData = userSessions.get(socket.id);
+            if (!userData || !room.adminClients.has(socket.id)) {
+                console.log(`Không quyền`);
+            }
+
+            const updateData = {};
+
+            if (futsalErrors.teamA !== undefined) {
+                room.currentState.matchData.teamA = room.currentState.matchData.teamA || {};
+                room.currentState.matchData.teamA.teamAFutsalFoul = parseInt(futsalErrors.teamA) || 0;
+                updateData.teamAFutsalFoul = room.currentState.matchData.teamA.teamAFutsalFoul;
+            }
+            if (futsalErrors.teamB !== undefined) {
+                room.currentState.matchData.teamB = room.currentState.matchData.teamB || {};
+                room.currentState.matchData.teamB.teamBFutsalFoul = parseInt(futsalErrors.teamB) || 0;
+                updateData.teamBFutsalFoul = room.currentState.matchData.teamB.teamBFutsalFoul;
+            }
+
+            // Update scores and team info in database
+            if (Object.keys(updateData).length > 0) {
+                updateMatchInDatabase(accessCode, updateData);
+            }
+
+            // Log để kiểm tra sau khi cập nhật
+            console.log('Updated lỗi:', {
+                teamA: room.currentState.matchData.teamA?.teamAFutsalFoul,
+                teamB: room.currentState.matchData.teamB?.teamBFutsalFoul
+            });
+            room.lastActivity = timestamp;
+
+            // Broadcast to all clients in the room
+            io.to(`room_${accessCode}`).emit('futsal_errors_updated', {
+                futsalErrors: {
+                    teamA: room.currentState.matchData.teamA?.teamAFutsalFoul || 0,
+                    teamB: room.currentState.matchData.teamB?.teamBFutsalFoul || 0
+                },
+                timestamp: timestamp
+            });
+
+            // Update scores in database if matchId exists
+            if (Object.keys(updateData).length > 0 && room.matchId) {
+                updateMatchInDatabase(room.matchId, updateData);
+            }
+
+        } catch (error) {
+            logger.error('Error in score_update:', error);
+            socket.emit('score_error', {
+                error: 'Lỗi khi cập nhật tỷ số',
+                details: error.message
+            });
+        }
+    });
+
+    socket.on('goal_scorers_update', async (data) => {
+        try {
+            console.log('DEBUG - goal_scorers_update data received:', JSON.stringify(data, null, 2));
+            const { accessCode, scorer, team, timestamp = Date.now() } = data;
+    
+            if (!accessCode || !scorer || !team) {
+                throw new Error('Mã truy cập, thông tin cầu thủ ghi bàn và đội không hợp lệ');
+            }
+    
+            if (!scorer.player || scorer.minute === undefined) {
+                throw new Error('Thiếu thông tin tên cầu thủ hoặc phút ghi bàn');
+            }
+    
+            const room = rooms.get(accessCode);
+            if (!room) {
+                console.log(`Room not found for access code: ${accessCode}`, { socketId: socket.id });
+                socket.emit('goal_scorers_error', { error: 'Phòng không tồn tại' });
+                return;
+            }
+    
+            const userData = userSessions.get(socket.id);
+            if (!userData || !room.adminClients.has(socket.id)) {
+                console.log(`Không có quyền cập nhật scorer`);
+                socket.emit('goal_scorers_error', { error: 'Không có quyền thực hiện thao tác này' });
+                return;
+            }
+    
+            room.currentState.matchData = room.currentState.matchData || {};
+            room.currentState.matchData.teamA = room.currentState.matchData.teamA || {};
+            room.currentState.matchData.teamB = room.currentState.matchData.teamB || {};
+    
+            if (!room.currentState.matchData.teamA.scorers) {
+                room.currentState.matchData.teamA.scorers = [];
+            }
+            if (!room.currentState.matchData.teamB.scorers) {
+                room.currentState.matchData.teamB.scorers = [];
+            }
+    
+            let teamScorers, teamField;
+            if (team === "teamA") {
+                teamScorers = room.currentState.matchData.teamA.scorers;
+                teamField = 'teamAScorers';
+            } else if (team === "teamB") {
+                teamScorers = room.currentState.matchData.teamB.scorers;
+                teamField = 'teamBScorers';
+            } else {
+                throw new Error('Team phải là "teamA" hoặc "teamB"');
+            }
+    
+            let existingPlayer = teamScorers.find(s => s.player === scorer.player);
+            
+            if (existingPlayer) {
+                const scores = existingPlayer.score ? existingPlayer.score.split(',') : [];
+                scores.push(scorer.minute.toString());
+                existingPlayer.score = scores.join(',');
+            } else {
+                teamScorers.push({
+                    player: scorer.player,
+                    score: scorer.minute.toString()
+                });
+            }
+    
+            const updateData = {
+                [teamField]: teamScorers
+            };
+    
+            const dbResult = await updateMatchInDatabase(accessCode, updateData);
+            if (!dbResult.success) {
+                console.error('Failed to update database:', dbResult.error);
+            }
+    
+            room.lastActivity = timestamp;
+    
+            io.to(`room_${accessCode}`).emit('goal_scorers_updated', {
+                team: team,
+                scorer: {
+                    player: scorer.player,
+                    minute: scorer.minute
+                },
+                timestamp: timestamp
+            });
+    
+            console.log(`Goal scorer updated successfully for ${team}:`, {
+                player: scorer.player,
+                minute: scorer.minute,
+                totalScorers: teamScorers.length
+            });
+    
+        } catch (error) {
+            logger.error('Error in goal_scorers_update:', error);
+            socket.emit('goal_scorers_error', {
+                error: 'Lỗi khi cập nhật thông tin ghi bàn',
+                details: error.message
+            });
+        }
+    });
     // Team names update
     socket.on('team_names_update', (data) => {
         try {

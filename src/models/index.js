@@ -7,10 +7,11 @@ const DisplaySetting = require('./DisplaySetting');
 const RoomSession = require('./RoomSession');
 const PaymentAccessCode = require('./PaymentAccessCode');
 const InfoPayment = require('./InfoPayment');
+const PlayerList = require('./PlayerList');
 
 function setupAssociations() {
   try {
-    console.log('🔄 Setting up model associations...');
+    // console.log('🔄 Setting up model associations...');
 
     // User has many Logos
     User.hasMany(Logo, { 
@@ -166,13 +167,11 @@ function setupAssociations() {
 
 async function initModels() {
   try {
-    console.log('🚀 Initializing database models...');
+    // console.log('🚀 Initializing database models...');
     
-    // Kiểm tra kết nối database trước
     await sequelize.authenticate();
     console.log('✅ Database connection established successfully');
 
-    // Setup associations
     const associationsSuccess = setupAssociations();
     
     if (!associationsSuccess) {
@@ -187,11 +186,11 @@ async function initModels() {
       logging: process.env.NODE_ENV === 'development' ? console.log : false
     };
 
-    // Sync models theo thứ tự dependency
     const models = [
       { model: User, name: 'User' },
       { model: Logo, name: 'Logo' },
       { model: Match, name: 'Match' },
+      { model: PlayerList, name: 'PlayerList' },
       { model: AccessCode, name: 'AccessCode' },
       { model: DisplaySetting, name: 'DisplaySetting' },
       { model: RoomSession, name: 'RoomSession' },
@@ -205,7 +204,6 @@ async function initModels() {
         console.log(`✅ ${name} model synced successfully`);
       } catch (syncError) {
         console.warn(`⚠️ Warning syncing ${name}:`, syncError.message);
-        // Continue with other models even if one fails
       }
     }
 
@@ -215,14 +213,12 @@ async function initModels() {
   } catch (error) {
     console.error('❌ Error initializing models:', error.message);
     
-    // Handle specific database errors
     if (error.name === 'SequelizeConnectionError') {
       console.error('💡 Database connection failed. Please check your database configuration.');
     } else if (error.message.includes('USING') || error.message.includes('syntax error')) {
       console.log('🔄 Attempting to recover from SQL syntax issues...');
       
       try {
-        // Just verify connection without sync in problematic cases
         await sequelize.authenticate();
         console.log('✅ Database connection verified, associations set up');
         return true;
@@ -237,7 +233,6 @@ async function initModels() {
   }
 }
 
-// Graceful shutdown handler
 async function closeDatabase() {
   try {
     await sequelize.close();
@@ -247,7 +242,6 @@ async function closeDatabase() {
   }
 }
 
-// Handle process termination
 process.on('SIGINT', async () => {
   console.log('🔄 Received SIGINT, closing database connection...');
   await closeDatabase();
@@ -255,9 +249,9 @@ process.on('SIGINT', async () => {
 });
 
 process.on('SIGTERM', async () => {
-  console.log('🔄 Received SIGTERM, closing database connection...');
-  await closeDatabase();
-  process.exit(0);
+console.log('🔄 Received SIGTERM, closing database connection...');
+await closeDatabase();
+process.exit(0);
 });
 
 module.exports = {
@@ -270,6 +264,7 @@ module.exports = {
   RoomSession,
   PaymentAccessCode,
   InfoPayment,
+  PlayerList,
   initModels,
   setupAssociations,
   closeDatabase

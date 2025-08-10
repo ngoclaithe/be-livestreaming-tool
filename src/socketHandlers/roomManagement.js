@@ -301,7 +301,6 @@ function initializeGlobalExpirationChecker(io, rooms) {
     clearInterval(globalExpirationChecker);
   }
 
-  // THAY ĐỔI: Giảm từ 30 phút xuống 5 phút (5 * 60 * 1000 = 300000ms)
   globalExpirationChecker = setInterval(async () => {
     try {
       const now = new Date();
@@ -318,7 +317,7 @@ function initializeGlobalExpirationChecker(io, rooms) {
     } catch (error) {
       logger.error('Error in global expiration checker:', error);
     }
-  }, 5 * 60 * 1000); // THAY ĐỔI: 5 phút thay vì 30 phút
+  }, 5 * 60 * 1000); 
 }
 
 async function checkRoomExpirationOnActivity(accessCode) {
@@ -474,7 +473,6 @@ function handleRoomManagement(io, socket, rooms, userSessions) {
             updateData.displayConnected = [...roomSession.displayConnected, socket.id];
 
             const currentDisplayCount = roomSession.displayConnected.length;
-            // THAY ĐỔI: Kiểm tra expiredAt trước khi update
             if (currentDisplayCount === 0 && roomSession.expiredAt === null) {
               isFirstDisplayConnection = true;
               const expiredAt = new Date();
@@ -485,7 +483,6 @@ function handleRoomManagement(io, socket, rooms, userSessions) {
               scheduleRoomExpiration(io, accessCode, expiredAt, rooms);
 
               try {
-                // THAY ĐỔI: Chỉ update AccessCode nếu expiredAt chưa được set
                 const currentAccessCode = await AccessCode.findOne({ where: { code: accessCode } });
                 if (currentAccessCode && currentAccessCode.expiredAt === null) {
                   await AccessCode.update(
@@ -507,7 +504,6 @@ function handleRoomManagement(io, socket, rooms, userSessions) {
                 logger.error(`ERROR updating AccessCode ${accessCode} (existing room):`, updateError);
               }
             } else if (roomSession.expiredAt) {
-              // Nếu đã có expiredAt, chỉ schedule lại timeout
               scheduleRoomExpiration(io, accessCode, roomSession.expiredAt, rooms);
               logger.info(`Room ${accessCode} already has expiredAt: ${roomSession.expiredAt}, rescheduling timeout only`);
             }
@@ -530,9 +526,9 @@ function handleRoomManagement(io, socket, rooms, userSessions) {
           console.log("Giá trị của loadedData là", loadedData);
 
           const updatedRoom = mergeRoomDataWithState(room, loadedData);
-          console.log("Giá trị của updatedRoom là", updatedRoom);
+          // console.log("Giá trị của updatedRoom là", updatedRoom);
           rooms.set(accessCode, updatedRoom);
-          console.log("Giá trị của rooms sau khi cập nhật updatedRoom là", rooms);
+          // console.log("Giá trị của rooms sau khi cập nhật updatedRoom là", rooms);
 
           socket.to(`room_${accessCode}`).emit('room_data_updated', {
             currentState: updatedRoom.currentState,

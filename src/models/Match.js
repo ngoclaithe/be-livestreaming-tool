@@ -46,6 +46,11 @@ const Match = sequelize.define('Match', {
     allowNull: false,
     comment: 'Match start time',
   },
+  time_start: {
+    type: DataTypes.TIME,
+    allowNull: true,
+    comment: 'Match start time (time only)',
+  },
   typeMatch: {
     type: DataTypes.ENUM('soccer', 'pickleball', 'other', 'futsal'),
     defaultValue: 'soccer',
@@ -81,43 +86,104 @@ const Match = sequelize.define('Match', {
     allowNull: false,
     comment: 'Number of sets won by Team B',
   },
+  // Team Scorers
+  teamAScorers: {
+    type: DataTypes.JSON,
+    allowNull: true,
+    comment: 'Team A scorers with details [{ player: "Name", score: "4,8,15" }]',
+  },
+  teamBScorers: {
+    type: DataTypes.JSON,
+    allowNull: true,
+    comment: 'Team B scorers with details [{ player: "Name", score: "4,8,15" }]',
+  },
   // Match statistics
-  possession: {
+  teamAPossession: {
     type: DataTypes.JSON,
     allowNull: true,
-    comment: 'Ball possession percentage',
+    comment: 'A Ball possession percentage',
   },
-  shots: {
+  teamBPossession: {
     type: DataTypes.JSON,
     allowNull: true,
-    comment: 'Total shots',
+    comment: 'B Ball possession percentage',
   },
-  shotsOnTarget: {
+  teamAShots: {
     type: DataTypes.JSON,
     allowNull: true,
-    comment: 'Shots on target',
+    comment: 'team A shots',
   },
-  corners: {
+  teamBShots: {
     type: DataTypes.JSON,
     allowNull: true,
-    comment: 'Corner kicks',
+    comment: 'team B shots',
   },
-  fouls: {
+  teamAShotsOnTarget: {
     type: DataTypes.JSON,
     allowNull: true,
-    comment: 'Fouls committed',
+    comment: 'team A Shots on target',
   },
-  offsides: {
+  teamBShotsOnTarget: {
+    type: DataTypes.JSON,
+    allowNull: true,
+    comment: 'team B Shots on target',
+  },
+  teamACorners: {
+    type: DataTypes.JSON,
+    allowNull: true,
+    comment: 'team A Corner kicks',
+  },
+  teamBCorners: {
+    type: DataTypes.JSON,
+    allowNull: true,
+    comment: 'team B Corner kicks',
+  },
+  teamAFouls: {
+    type: DataTypes.JSON,
+    allowNull: true,
+    comment: 'A Fouls committed',
+  },
+  teamBFouls: {
+    type: DataTypes.JSON,
+    allowNull: true,
+    comment: 'B Fouls committed',
+  },
+  teamAFutsalFoul: {
+    type: DataTypes.JSON,
+    allowNull: true,
+    comment: 'Futsal fouls committed',
+  },
+  teamBFutsalFoul: {
+    type: DataTypes.JSON,
+    allowNull: true,
+    comment: 'Futsal fouls committed',
+  },
+  teamAOffsides: {
     type: DataTypes.JSON,
     allowNull: true,
     comment: 'Offside violations',
   },
-  yellowCards: {
+  teamBOffsides: {
+    type: DataTypes.JSON,
+    allowNull: true,
+    comment: 'Offside violations',
+  },
+  teamAYellowCards: {
     type: DataTypes.JSON,
     allowNull: true,
     comment: 'Yellow cards',
   },
-  redCards: {
+  teamBYellowCards: {
+    type: DataTypes.JSON,
+    allowNull: true,
+    comment: 'Yellow cards',
+  },
+  teamARedCards: {
+    type: DataTypes.JSON,
+    allowNull: true,
+    comment: 'Red cards',
+  },
+  teamBRedCards: {
     type: DataTypes.JSON,
     allowNull: true,
     comment: 'Red cards',
@@ -229,35 +295,30 @@ Match.prototype.updateStatus = function(status) {
   return this.save();
 };
 
-Match.prototype.updatePossession = function(home, away) {
-  if (!this.possession) {
-    this.possession = { home: 50, away: 50 }; // Default 50-50
+// New methods for scorers
+Match.prototype.addScorer = function(team, playerName, minute) {
+  const teamField = team === 'A' ? 'teamAScorers' : 'teamBScorers';
+  
+  if (!this[teamField]) {
+    this[teamField] = [];
   }
   
-  if (home !== undefined) this.possession.home = home;
-  if (away !== undefined) this.possession.away = away;
+  // Find existing player
+  const existingPlayer = this[teamField].find(scorer => scorer.player === playerName);
   
-  // Ensure total is 100%
-  const total = this.possession.home + this.possession.away;
-  if (total > 0) {
-    this.possession.home = Math.round((this.possession.home / total) * 100);
-    this.possession.away = 100 - this.possession.home;
+  if (existingPlayer) {
+    // Add minute to existing player's score
+    const scores = existingPlayer.score ? existingPlayer.score.split(',') : [];
+    scores.push(minute.toString());
+    existingPlayer.score = scores.join(',');
+  } else {
+    // Add new player
+    this[teamField].push({
+      player: playerName,
+      score: minute.toString()
+    });
   }
   
-  return this.save();
-};
-
-Match.prototype.updateShots = function(home, away) {
-  if (!this.shots) this.shots = { home: 0, away: 0 };
-  if (home !== undefined) this.shots.home = home;
-  if (away !== undefined) this.shots.away = away;
-  return this.save();
-};
-
-Match.prototype.updateShotsOnTarget = function(home, away) {
-  if (!this.shotsOnTarget) this.shotsOnTarget = { home: 0, away: 0 };
-  if (home !== undefined) this.shotsOnTarget.home = home;
-  if (away !== undefined) this.shotsOnTarget.away = away;
   return this.save();
 };
 
@@ -282,5 +343,72 @@ Match.getUpcomingMatches = function(limit = 10) {
     limit,
   });
 };
+Match.prototype.addScorer = function(team, playerName, minute) {
+  const teamField = team === 'A' || team === 'teamA' ? 'teamAScorers' : 'teamBScorers';
+  
+  // Initialize if null or undefined
+  if (!this[teamField]) {
+    this[teamField] = [];
+  }
+  
+  // Ensure it's an array (in case it was stored as string)
+  if (typeof this[teamField] === 'string') {
+    try {
+      this[teamField] = JSON.parse(this[teamField]);
+    } catch (e) {
+      this[teamField] = [];
+    }
+  }
+  
+  // Find existing player
+  const existingPlayer = this[teamField].find(scorer => scorer.player === playerName);
+  
+  if (existingPlayer) {
+    // Add minute to existing player's score
+    const scores = existingPlayer.score ? existingPlayer.score.split(',') : [];
+    scores.push(minute.toString());
+    existingPlayer.score = scores.join(',');
+  } else {
+    // Add new player
+    this[teamField].push({
+      player: playerName,
+      score: minute.toString()
+    });
+  }
+  
+  // Mark as changed for Sequelize to detect the update
+  this.changed(teamField, true);
+  
+  return this.save();
+};
 
+// Thêm method để xóa một bàn thắng
+Match.prototype.removeScorer = function(team, playerName, minute) {
+  const teamField = team === 'A' || team === 'teamA' ? 'teamAScorers' : 'teamBScorers';
+  
+  if (!this[teamField] || !Array.isArray(this[teamField])) {
+    return this.save();
+  }
+  
+  // Find the player
+  const existingPlayer = this[teamField].find(scorer => scorer.player === playerName);
+  
+  if (existingPlayer) {
+    const scores = existingPlayer.score ? existingPlayer.score.split(',') : [];
+    const updatedScores = scores.filter(score => score !== minute.toString());
+    
+    if (updatedScores.length === 0) {
+      // Remove player if no more scores
+      this[teamField] = this[teamField].filter(scorer => scorer.player !== playerName);
+    } else {
+      // Update player's scores
+      existingPlayer.score = updatedScores.join(',');
+    }
+    
+    // Mark as changed for Sequelize
+    this.changed(teamField, true);
+  }
+  
+  return this.save();
+};
 module.exports = Match;
