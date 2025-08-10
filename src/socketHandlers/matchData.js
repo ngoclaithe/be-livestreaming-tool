@@ -859,60 +859,6 @@ function handleMatchData(io, socket, rooms, userSessions) {
         }
     });
 
-    // Lineup updates
-    socket.on('lineup_update', (data) => {
-        try {
-            const { accessCode, lineup, timestamp = Date.now() } = data;
-
-            if (!accessCode || !lineup) {
-                throw new Error('Access code and lineup data are required');
-            }
-
-            const room = rooms.get(accessCode);
-            if (!room) {
-                throw new Error('Room not found');
-            }
-
-            // Initialize lineupData if it doesn't exist
-            if (!room.currentState.lineupData) {
-                room.currentState.lineupData = {};
-            }
-
-            // Update team lineups
-            if (lineup.teamA && Array.isArray(lineup.teamA)) {
-                room.currentState.lineupData.teamA = lineup.teamA.map(player => ({
-                    number: player.number || '',
-                    name: player.name || ''
-                }));
-            }
-
-            if (lineup.teamB && Array.isArray(lineup.teamB)) {
-                room.currentState.lineupData.teamB = lineup.teamB.map(player => ({
-                    number: player.number || '',
-                    name: player.name || ''
-                }));
-            }
-
-            room.lastActivity = timestamp;
-
-            // Broadcast to all clients in the room
-            console.log("giá trị broadcast là:", room.currentState.lineupData);
-            io.to(`room_${accessCode}`).emit('lineup_updated', {
-                lineupData: room.currentState.lineupData,
-                timestamp: timestamp
-            });
-
-            logger.info(`Lineup data updated for room ${accessCode}`);
-
-        } catch (error) {
-            logger.error('Error in lineup_update:', error);
-            socket.emit('lineup_error', {
-                error: 'Lỗi khi cập nhật đội hình',
-                details: error.message
-            });
-        }
-    });
-
     // Handle team score set update
     socket.on('team_score_set_update', async (data) => {
         try {

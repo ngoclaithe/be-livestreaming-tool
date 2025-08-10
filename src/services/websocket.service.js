@@ -7,6 +7,7 @@ const { handleMatchData } = require('../socketHandlers/matchData');
 const { handleDisplaySettings } = require('../socketHandlers/displaySettings');
 const { handleTimer, processTimerTick } = require('../socketHandlers/timerHandler');
 const { handleAudioUpdates, joinCommentaryRoom } = require('../socketHandlers/audioHandler');
+const { handlePlayerList } = require('../socketHandlers/playerList');
 
 class WebSocketService {
   constructor(io) {
@@ -15,7 +16,7 @@ class WebSocketService {
     this.rooms = new Map(); 
     this.userSessions = new Map(); 
     this.timerIntervals = new Map(); 
-    this.cleanupInterval = null; // Interval cho cleanup tổng quát
+    this.cleanupInterval = null; 
   }
 
   initialize() {
@@ -43,7 +44,6 @@ class WebSocketService {
       });
     });
 
-    // Khởi tạo cleanup interval cho các task tổng quát
     this.setupGeneralCleanupInterval();
 
     return this.io;
@@ -65,6 +65,7 @@ class WebSocketService {
     handleDisplaySettings(this.io, socket, this.rooms, this.userSessions);
     handleTimer(this.io, socket, this.rooms, this.userSessions);
     handleAudioUpdates(this.io, socket, this.rooms, this.userSessions);
+    handlePlayerList(this.io, socket, this.rooms, this.userSessions);
     
     this.setupGlobalHandlers(socket);
   }
@@ -81,8 +82,8 @@ class WebSocketService {
     });
   }
   setupGeneralCleanupInterval() {
-    const CLEANUP_INTERVAL = 60 * 60 * 1000; // 1 giờ
-    const MAX_INACTIVE_TIME = 2 * 60 * 60 * 1000; // 2 giờ
+    const CLEANUP_INTERVAL = 60 * 60 * 1000; 
+    const MAX_INACTIVE_TIME = 2 * 60 * 60 * 1000; 
     
     this.cleanupInterval = setInterval(() => {
       const now = Date.now();
@@ -180,7 +181,6 @@ class WebSocketService {
    * Send current room state to a socket
    */
   sendRoomStateToSocket(socket, room) {
-    // Define all possible state events
     const stateEvents = [
       { event: 'score_updated', data: { scores: room.scores } },
       { event: 'match_stats_updated', data: { stats: room.stats } },
@@ -213,7 +213,6 @@ class WebSocketService {
       }}
     ];
 
-    // Only send events where we have data
     stateEvents.forEach(({ event, data }) => {
       if (data && Object.values(data)[0] !== null && Object.values(data)[0] !== undefined) {
         socket.emit(event, data);
@@ -244,11 +243,10 @@ class WebSocketService {
    * Set up timer for a room if it doesn't exist
    */
   setupTimerForRoom(accessCode) {
-    // Only set up timer if not already set up for this room
     if (!this.timerIntervals.has(accessCode)) {
       const interval = setInterval(() => {
         processTimerTick(this.io, this.rooms);
-      }, 1000); // Update every second
+      }, 1000); 
       
       this.timerIntervals.set(accessCode, interval);
       logger.info(`Timer interval set up for room ${accessCode}`);
@@ -317,14 +315,12 @@ class WebSocketService {
   cleanup() {
     logger.info('Starting WebSocket service cleanup...');
     
-    // Clear general cleanup interval
     if (this.cleanupInterval) {
       clearInterval(this.cleanupInterval);
       this.cleanupInterval = null;
       logger.info('General cleanup interval cleared');
     }
     
-    // Clear all timer intervals
     if (this.timerIntervals && this.timerIntervals.size > 0) {
       this.timerIntervals.forEach((interval, accessCode) => {
         clearInterval(interval);
@@ -333,10 +329,8 @@ class WebSocketService {
       this.timerIntervals.clear();
     }
     
-    // Clean up room timeouts (from optimized room management)
     cleanupRoomTimeouts();
     
-    // Disconnect all sockets gracefully
     this.connections.forEach((socket, socketId) => {
       try {
         socket.disconnect(true);
@@ -346,7 +340,6 @@ class WebSocketService {
       }
     });
     
-    // Clear all data structures
     this.connections.clear();
     this.userSessions.clear();
     this.rooms.clear();
