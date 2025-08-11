@@ -14,80 +14,80 @@ function setupAssociations() {
     // console.log('🔄 Setting up model associations...');
 
     // User has many Logos
-    User.hasMany(Logo, { 
-      foreignKey: 'userId', 
+    User.hasMany(Logo, {
+      foreignKey: 'userId',
       as: 'logos',
       onDelete: 'CASCADE',
       onUpdate: 'CASCADE'
     });
-    
-    Logo.belongsTo(User, { 
-      foreignKey: 'userId', 
-      as: 'user' 
+
+    Logo.belongsTo(User, {
+      foreignKey: 'userId',
+      as: 'user'
     });
 
     // User has many Matches
-    User.hasMany(Match, { 
-      foreignKey: 'createdBy', 
+    User.hasMany(Match, {
+      foreignKey: 'createdBy',
       as: 'matches',
       onDelete: 'SET NULL',
       onUpdate: 'CASCADE'
     });
 
-    Match.belongsTo(User, { 
-      foreignKey: 'createdBy', 
-      as: 'creator' 
+    Match.belongsTo(User, {
+      foreignKey: 'createdBy',
+      as: 'creator'
     });
 
     // User has many AccessCodes (multiple relationships)
-    User.hasMany(AccessCode, { 
-      foreignKey: 'createdBy', 
+    User.hasMany(AccessCode, {
+      foreignKey: 'createdBy',
       as: 'createdAccessCodes',
       onDelete: 'SET NULL',
       onUpdate: 'CASCADE'
     });
-    
-    User.hasMany(AccessCode, { 
-      foreignKey: 'usedBy', 
+
+    User.hasMany(AccessCode, {
+      foreignKey: 'usedBy',
       as: 'usedAccessCodes',
       onDelete: 'SET NULL',
       onUpdate: 'CASCADE'
     });
-    
-    User.hasMany(AccessCode, { 
-      foreignKey: 'revokedBy', 
+
+    User.hasMany(AccessCode, {
+      foreignKey: 'revokedBy',
       as: 'revokedAccessCodes',
       onDelete: 'SET NULL',
       onUpdate: 'CASCADE'
     });
-    
+
     // AccessCode belongs to User (multiple relationships)
-    AccessCode.belongsTo(User, { 
-      foreignKey: 'createdBy', 
-      as: 'creator' 
+    AccessCode.belongsTo(User, {
+      foreignKey: 'createdBy',
+      as: 'creator'
     });
-    
-    AccessCode.belongsTo(User, { 
-      foreignKey: 'usedBy', 
-      as: 'usedByUser' 
+
+    AccessCode.belongsTo(User, {
+      foreignKey: 'usedBy',
+      as: 'usedByUser'
     });
-    
-    AccessCode.belongsTo(User, { 
-      foreignKey: 'revokedBy', 
-      as: 'revoker' 
+
+    AccessCode.belongsTo(User, {
+      foreignKey: 'revokedBy',
+      as: 'revoker'
     });
 
     // Match has many AccessCodes
-    Match.hasMany(AccessCode, { 
-      foreignKey: 'matchId', 
+    Match.hasMany(AccessCode, {
+      foreignKey: 'matchId',
       as: 'accessCodes',
       onDelete: 'CASCADE',
       onUpdate: 'CASCADE'
     });
-    
-    AccessCode.belongsTo(Match, { 
-      foreignKey: 'matchId', 
-      as: 'match' 
+
+    AccessCode.belongsTo(Match, {
+      foreignKey: 'matchId',
+      as: 'match'
     });
 
     // AccessCode has many DisplaySettings
@@ -97,7 +97,7 @@ function setupAssociations() {
       onDelete: 'CASCADE',
       onUpdate: 'CASCADE'
     });
-    
+
     DisplaySetting.belongsTo(AccessCode, {
       foreignKey: 'accessCodeId',
       as: 'accessCodeData'
@@ -155,7 +155,17 @@ function setupAssociations() {
       onDelete: 'SET NULL',
       onUpdate: 'CASCADE'
     });
+    AccessCode.hasMany(PlayerList, {
+      foreignKey: 'accessCode',
+      sourceKey: 'code',
+      as: 'playerLists'
+    });
 
+    PlayerList.belongsTo(AccessCode, {
+      foreignKey: 'accessCode',
+      targetKey: 'code',
+      as: 'accessCodeData'
+    });
     console.log('✅ Model associations set up successfully');
     return true;
   } catch (error) {
@@ -168,18 +178,18 @@ function setupAssociations() {
 async function initModels() {
   try {
     // console.log('🚀 Initializing database models...');
-    
+
     await sequelize.authenticate();
     console.log('✅ Database connection established successfully');
 
     const associationsSuccess = setupAssociations();
-    
+
     if (!associationsSuccess) {
       throw new Error('Failed to setup model associations');
     }
 
     console.log('🔄 Synchronizing database models...');
-    
+
     const syncOptions = {
       alter: false,
       force: false,
@@ -209,15 +219,15 @@ async function initModels() {
 
     console.log('✅ All database models initialized successfully');
     return true;
-    
+
   } catch (error) {
     console.error('❌ Error initializing models:', error.message);
-    
+
     if (error.name === 'SequelizeConnectionError') {
       console.error('💡 Database connection failed. Please check your database configuration.');
     } else if (error.message.includes('USING') || error.message.includes('syntax error')) {
       console.log('🔄 Attempting to recover from SQL syntax issues...');
-      
+
       try {
         await sequelize.authenticate();
         console.log('✅ Database connection verified, associations set up');
@@ -228,7 +238,7 @@ async function initModels() {
     } else if (error.name === 'SequelizeValidationError') {
       console.error('💡 Model validation error. Please check your model definitions.');
     }
-    
+
     return false;
   }
 }
@@ -249,9 +259,9 @@ process.on('SIGINT', async () => {
 });
 
 process.on('SIGTERM', async () => {
-console.log('🔄 Received SIGTERM, closing database connection...');
-await closeDatabase();
-process.exit(0);
+  console.log('🔄 Received SIGTERM, closing database connection...');
+  await closeDatabase();
+  process.exit(0);
 });
 
 module.exports = {
