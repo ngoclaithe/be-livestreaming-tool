@@ -1,5 +1,5 @@
 const logger = require('../utils/logger');
-const { sequelize, RoomSession, Match, AccessCode, DisplaySetting } = require('../models');
+const { sequelize, RoomSession, Match, AccessCode, DisplaySetting, PlayerList } = require('../models');
 const { Op } = require('sequelize');
 
 let globalExpirationChecker = null;
@@ -103,7 +103,9 @@ async function loadRoomData(accessCode) {
           scoreSet: match.teamAScoreSet || 0,
           logo: match.teamALogo,
           kitColor: match.teamAkitcolor,
-          kit2Color: match.teamA2kitcolor
+          kit2Color: match.teamA2kitcolor,
+          scorers: match.teamAScorers || [],
+          futsalFouls: match.teamAFutsalFoul || 0
         },
         teamB: {
           name: match.teamBName,
@@ -111,7 +113,9 @@ async function loadRoomData(accessCode) {
           scoreSet: match.teamBScoreSet || 0,
           logo: match.teamBLogo,
           kitColor: match.teamBkitcolor,
-          kit2Color: match.teamB2kitcolor
+          kit2Color: match.teamB2kitcolor,
+          scorers: match.teamBScorers || [],
+          futsalFouls: match.teamBFutsalFoul || 0
         },
         tournament: match.tournamentName || "",
         tournamentLogo: match.tournamentLogo,
@@ -156,7 +160,9 @@ function mergeRoomDataWithState(roomState, loadedData) {
         scoreSet: match.teamA.scoreSet || 0,
         logo: match.teamA.logo,
         teamAKitColor: match.teamA.kitColor,    
-        teamA2KitColor: match.teamA.kit2Color   
+        teamA2KitColor: match.teamA.kit2Color,
+        scorers: match.teamA.scorers || [],
+        futsalFouls: match.teamA.futsalFouls || 0
       },
       teamB: {
         name: match.teamB.name,
@@ -164,7 +170,9 @@ function mergeRoomDataWithState(roomState, loadedData) {
         scoreSet: match.teamB.scoreSet || 0,
         logo: match.teamB.logo,
         teamBKitColor: match.teamB.kitColor,    
-        teamB2KitColor: match.teamB.kit2Color   
+        teamB2KitColor: match.teamB.kit2Color,
+        scorers: match.teamB.scorers || [],
+        futsalFouls: match.teamB.futsalFouls || 0
       },
       matchTime: roomState.currentState.matchData.matchTime,
       period: roomState.currentState.matchData.period,

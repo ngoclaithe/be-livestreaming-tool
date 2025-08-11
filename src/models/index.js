@@ -3,11 +3,11 @@ const User = require('./User');
 const Logo = require('./Logo');
 const Match = require('./Match');
 const AccessCode = require('./AccessCode');
+const PlayerList = require('./PlayerList');
 const DisplaySetting = require('./DisplaySetting');
 const RoomSession = require('./RoomSession');
 const PaymentAccessCode = require('./PaymentAccessCode');
 const InfoPayment = require('./InfoPayment');
-const PlayerList = require('./PlayerList');
 
 function setupAssociations() {
   try {
@@ -76,7 +76,17 @@ function setupAssociations() {
       foreignKey: 'revokedBy',
       as: 'revoker'
     });
+    AccessCode.hasMany(PlayerList, {
+      foreignKey: 'accessCode',
+      sourceKey: 'code',
+      as: 'playerLists'
+    });
 
+    PlayerList.belongsTo(AccessCode, {
+      foreignKey: 'accessCode',
+      targetKey: 'code',
+      as: 'accessCodeData'
+    });
     // Match has many AccessCodes
     Match.hasMany(AccessCode, {
       foreignKey: 'matchId',
@@ -155,17 +165,7 @@ function setupAssociations() {
       onDelete: 'SET NULL',
       onUpdate: 'CASCADE'
     });
-    AccessCode.hasMany(PlayerList, {
-      foreignKey: 'accessCode',
-      sourceKey: 'code',
-      as: 'playerLists'
-    });
 
-    PlayerList.belongsTo(AccessCode, {
-      foreignKey: 'accessCode',
-      targetKey: 'code',
-      as: 'accessCodeData'
-    });
     console.log('✅ Model associations set up successfully');
     return true;
   } catch (error) {

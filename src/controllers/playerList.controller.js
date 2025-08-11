@@ -72,7 +72,10 @@ exports.getPlayerList = async (req, res, next) => {
     });
 
     if (!playerList) {
-      throw new ApiError(StatusCodes.NOT_FOUND, 'Không tìm thấy danh sách cầu thủ');
+      return res.status(StatusCodes.OK).json({
+        success: true,
+        data: null
+      });
     }
 
     const matchInfo = playerList.accessCodeData?.match ? {
