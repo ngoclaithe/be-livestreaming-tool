@@ -50,7 +50,7 @@ function handleAudioUpdates(io, socket, rooms, userSessions) {
         timestamp: timestamp
       });
       
-      const validCommands = ['PLAY_REFEREE_VOICE', 'STOP_AUDIO', 'PAUSE_AUDIO', 'RESUME_AUDIO'];
+      const validCommands = ['PLAY_REFEREE_VOICE', 'PLAY_REFEREE_VOICE_REALTIME', 'STOP_AUDIO', 'PAUSE_AUDIO', 'RESUME_AUDIO'];
       if (!validCommands.includes(command)) {
         throw new Error(`Lệnh không được hỗ trợ: ${command}`);
       }
@@ -142,12 +142,12 @@ function handleAudioUpdates(io, socket, rooms, userSessions) {
         timestamp: timestamp
       });
       
-      const validCommands = ['PLAY_REFEREE_VOICE', 'STOP_AUDIO', 'PAUSE_AUDIO', 'RESUME_AUDIO'];
+      const validCommands = ['PLAY_REFEREE_VOICE', 'PLAY_REFEREE_VOICE_REALTIME', 'STOP_AUDIO', 'PAUSE_AUDIO', 'RESUME_AUDIO'];
       if (!validCommands.includes(command)) {
         throw new Error(`Lệnh không được hỗ trợ: ${command}`);
       }
       
-      if (command === 'PLAY_REFEREE_VOICE') {
+      if (command === 'PLAY_REFEREE_VOICE' || command === 'PLAY_REFEREE_VOICE_REALTIME') {
         if (!payload.audioData || !payload.mimeType) {
           throw new Error('Thiếu dữ liệu âm thanh hoặc mimeType');
         }
