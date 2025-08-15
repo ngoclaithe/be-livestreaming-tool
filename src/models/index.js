@@ -8,10 +8,10 @@ const DisplaySetting = require('./DisplaySetting');
 const RoomSession = require('./RoomSession');
 const PaymentAccessCode = require('./PaymentAccessCode');
 const InfoPayment = require('./InfoPayment');
+const Activity = require('./Activity');
 
 function setupAssociations() {
   try {
-    // console.log('🔄 Setting up model associations...');
 
     // User has many Logos
     User.hasMany(Logo, {
@@ -76,6 +76,7 @@ function setupAssociations() {
       foreignKey: 'revokedBy',
       as: 'revoker'
     });
+
     AccessCode.hasMany(PlayerList, {
       foreignKey: 'accessCode',
       sourceKey: 'code',
@@ -87,6 +88,7 @@ function setupAssociations() {
       targetKey: 'code',
       as: 'accessCodeData'
     });
+
     // Match has many AccessCodes
     Match.hasMany(AccessCode, {
       foreignKey: 'matchId',
@@ -166,10 +168,24 @@ function setupAssociations() {
       onUpdate: 'CASCADE'
     });
 
-    console.log('✅ Model associations set up successfully');
+    // ===== ACTIVITY MODEL ASSOCIATIONS =====
+    User.hasMany(Activity, {
+      foreignKey: 'userId',
+      as: 'activities',
+      onDelete: 'CASCADE',
+      onUpdate: 'CASCADE'
+    });
+
+    // Activity belongs to User
+    Activity.belongsTo(User, {
+      foreignKey: 'userId',
+      as: 'user'
+    });
+
+    console.log('Model associations set up successfully');
     return true;
   } catch (error) {
-    console.error('❌ Error setting up associations:', error.message);
+    console.error('Error setting up associations:', error.message);
     console.error('Stack trace:', error.stack);
     return false;
   }
@@ -205,38 +221,39 @@ async function initModels() {
       { model: DisplaySetting, name: 'DisplaySetting' },
       { model: RoomSession, name: 'RoomSession' },
       { model: PaymentAccessCode, name: 'PaymentAccessCode' },
-      { model: InfoPayment, name: 'InfoPayment' }
+      { model: InfoPayment, name: 'InfoPayment' },
+      { model: Activity, name: 'Activity' } 
     ];
 
     for (const { model, name } of models) {
       try {
         await model.sync(syncOptions);
-        console.log(`✅ ${name} model synced successfully`);
+        console.log(`${name} model synced successfully`);
       } catch (syncError) {
-        console.warn(`⚠️ Warning syncing ${name}:`, syncError.message);
+        console.warn(`Warning syncing ${name}:`, syncError.message);
       }
     }
 
-    console.log('✅ All database models initialized successfully');
+    console.log('All database models initialized successfully');
     return true;
 
   } catch (error) {
-    console.error('❌ Error initializing models:', error.message);
+    console.error('Error initializing models:', error.message);
 
     if (error.name === 'SequelizeConnectionError') {
-      console.error('💡 Database connection failed. Please check your database configuration.');
+      console.error('Database connection failed. Please check your database configuration.');
     } else if (error.message.includes('USING') || error.message.includes('syntax error')) {
-      console.log('🔄 Attempting to recover from SQL syntax issues...');
+      console.log('Attempting to recover from SQL syntax issues...');
 
       try {
         await sequelize.authenticate();
-        console.log('✅ Database connection verified, associations set up');
+        console.log('Database connection verified, associations set up');
         return true;
       } catch (authError) {
-        console.error('❌ Database authentication failed:', authError.message);
+        console.error('Database authentication failed:', authError.message);
       }
     } else if (error.name === 'SequelizeValidationError') {
-      console.error('💡 Model validation error. Please check your model definitions.');
+      console.error('Model validation error. Please check your model definitions.');
     }
 
     return false;
@@ -246,20 +263,20 @@ async function initModels() {
 async function closeDatabase() {
   try {
     await sequelize.close();
-    console.log('✅ Database connection closed successfully');
+    console.log('Database connection closed successfully');
   } catch (error) {
-    console.error('❌ Error closing database connection:', error.message);
+    console.error('Error closing database connection:', error.message);
   }
 }
 
 process.on('SIGINT', async () => {
-  console.log('🔄 Received SIGINT, closing database connection...');
+  console.log('Received SIGINT, closing database connection...');
   await closeDatabase();
   process.exit(0);
 });
 
 process.on('SIGTERM', async () => {
-  console.log('🔄 Received SIGTERM, closing database connection...');
+  console.log('Received SIGTERM, closing database connection...');
   await closeDatabase();
   process.exit(0);
 });
@@ -275,6 +292,7 @@ module.exports = {
   PaymentAccessCode,
   InfoPayment,
   PlayerList,
+  Activity,
   initModels,
   setupAssociations,
   closeDatabase

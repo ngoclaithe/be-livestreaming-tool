@@ -1,79 +1,113 @@
-const { User, AccessCode, PaymentAccessCode } = require('../models');
+const { User, AccessCode, PaymentAccessCode, Activity } = require('../models');
 
 // @desc    Lấy danh sách hoạt động
 // @route   GET /api/v1/activities
-// @access  Private/Admin
+// @access  Private
 exports.getActivities = async (req, res) => {
   try {
-    const page = parseInt(req.query.page, 10) || 1;
-    const limit = parseInt(req.query.limit, 10) || 20;
-    const offset = (page - 1) * limit;
+    const userId = req.user.id;
+    const isAdmin = req.user.role === 'admin';
+    const limit = 50; // Giới hạn 50 bản ghi mới nhất
 
-    const users = await User.findAll({
-      attributes: ['id', 'name', 'email', 'role', 'createdAt'],
-      order: [['createdAt', 'DESC']],
-      limit,
-      offset,
-      raw: true
-    }).then(users => users.map(user => ({
-      ...user,
-      type: 'user',
-      action: 'create_user',
-      createdAt: user.createdAt
-    })));
+    if (!Activity) {
+      throw new Error('Activity model is undefined');
+    }
+
+    const userCondition = isAdmin ? {} : { user_id: userId };
+    const accessCodeCondition = isAdmin ? {} : { createdBy: userId };
+    const paymentCondition = isAdmin ? {} : { user_id: userId };
+
+    const activityLogs = await Activity.findAll({
+      where: userCondition,
+      order: [['created_at', 'DESC']],
+      limit: isAdmin ? undefined : limit,
+      include: [{
+        model: User,
+        as: 'user',
+        attributes: ['id', 'name', 'email']
+      }],
+      raw: true,
+      nest: true
+    });
 
     const accessCodes = await AccessCode.findAll({
-      attributes: ['id', 'code', 'status', 'createdAt', 'createdBy'],
+      where: accessCodeCondition,
+      attributes: ['id', 'code', 'status', 'createdAt', 'expiredAt', 'createdBy'],
       include: [{
         model: User,
         as: 'creator',
         attributes: ['id', 'name', 'email']
       }],
       order: [['createdAt', 'DESC']],
-      limit,
-      offset,
+      limit: isAdmin ? undefined : limit,
       raw: true,
       nest: true
-    }).then(codes => codes.map(code => ({
+    });
+
+    const paymentRequests = await PaymentAccessCode.findAll({
+      where: paymentCondition,
+      attributes: [
+        'id', 
+        'code_pay',
+        'status', 
+        'amount', 
+        'created_at',
+        'updated_at',
+        'user_id'
+      ], 
+      include: [{
+        model: User,
+        as: 'owner',
+        attributes: ['id', 'name', 'email']
+      }],
+      order: [['created_at', 'DESC']],
+      limit: isAdmin ? undefined : limit,
+      raw: true,
+      nest: true
+    });
+
+    const formatActivityLogs = activityLogs.map(log => ({
+      id: log.id,
+      type: log.entity_type,
+      action: log.action,
+      description: log.details,
+      metadata: log.details,
+      user: log.user,
+      createdAt: log.created_at
+    }));
+
+    const formatAccessCodes = accessCodes.map(code => ({
       id: code.id,
       type: 'access_code',
       action: 'create_access_code',
       code: code.code,
       status: code.status,
+      expiredAt: code.expiredAt,
       createdBy: code.creator,
       createdAt: code.createdAt
-    })));
+    }));
 
-    const paymentRequests = await PaymentAccessCode.findAll({
-      attributes: ['id', 'code_pay', 'status', 'amount', 'created_at', 'user_id'],
-      include: [{
-        model: User,
-        as: 'owner', // ✅ Sử dụng alias 'owner' thay vì 'requester'
-        attributes: ['id', 'name', 'email'],
-        required: false
-      }],
-      order: [['created_at', 'DESC']],
-      limit,
-      offset,
-      raw: true,
-      nest: true,
-      subQuery: false,
-      includeIgnoreAttributes: false
-    }).then(requests => requests.map(req => ({
+    const formatPaymentRequests = paymentRequests.map(req => ({
       id: req.id,
       type: 'payment_request',
-      action: 'create_payment_request',
+      action: req.status === 'pending' ? 'create_payment_request' : `payment_${req.status}`,
       code: req.code_pay,
       status: req.status,
       amount: req.amount,
-      user: req.owner, // ✅ Cập nhật tên field
-      createdAt: req.created_at
-    })));
+      user: req.owner,
+      createdAt: req.created_at,
+      updatedAt: req.updated_at
+    }));
 
-    let allActivities = [...users, ...accessCodes, ...paymentRequests];
-    allActivities.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+    let allActivities = [
+      ...formatActivityLogs,
+      ...formatAccessCodes,
+      ...formatPaymentRequests
+    ].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)); 
 
-    allActivities = allActivities.slice(0, limit);
+    if (!isAdmin) {
+      allActivities = allActivities.slice(0, limit);
+    }
 
     return res.status(200).json({
       success: true,
@@ -81,7 +115,6 @@ exports.getActivities = async (req, res) => {
       data: allActivities
     });
   } catch (error) {
-    console.error('Error getting activities:', error);
     return res.status(500).json({
       success: false,
       message: 'Có lỗi xảy ra khi lấy danh sách hoạt động',

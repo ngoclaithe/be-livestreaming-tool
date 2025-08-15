@@ -40,7 +40,8 @@ function createNewRoom(accessCode) {
         totalShots: { team1: 0, team2: 0 },
         shotsOnTarget: { team1: 0, team2: 0 },
         corners: { team1: 0, team2: 0 },
-        yellowCards: { team1: 0, team2: 0 },
+        yellowCards: { team1: [], team2: [] },
+        redCards: { team1: [], team2: [] },
         fouls: { team1: 0, team2: 0 }
       },
       displaySettings: {
@@ -148,6 +149,10 @@ async function loadRoomData(accessCode) {
             team1: match.teamAYellowCards || 0,
             team2: match.teamBYellowCards || 0
           },
+          redCards: {
+            team1: match.teamARedCards || 0,
+            team2: match.teamBRedCards || 0
+          },
           fouls: {
             team1: match.teamAFouls || 0,
             team2: match.teamBFouls || 0
@@ -220,8 +225,12 @@ function mergeRoomDataWithState(roomState, loadedData) {
           team2: match.stats.corners.team2 || 0
         },
         yellowCards: {
-          team1: match.stats.yellowCards.team1 || 0,
-          team2: match.stats.yellowCards.team2 || 0
+          team1: match.stats.yellowCards.team1 || [],  
+          team2: match.stats.yellowCards.team2 || []   
+        },
+        redCards: {
+          team1: match.stats.redCards.team1 || [],     
+          team2: match.stats.redCards.team2 || []      
         },
         fouls: {
           team1: match.stats.fouls.team1 || 0,

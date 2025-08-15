@@ -1,16 +1,15 @@
 const express = require('express');
 const router = express.Router();
-const { protect, authorize } = require('../middleware/auth.middleware');
+const { protect } = require('../middleware/auth.middleware');
 const { getActivities } = require('../controllers/activities.controller');
 
-// Tất cả các route đều yêu cầu đăng nhập và quyền admin
+// Yêu cầu đăng nhập nhưng không yêu cầu quyền admin
 router.use(protect);
-router.use(authorize('admin'));
 
 /**
  * @route   GET /api/v1/activities
- * @desc    Lấy danh sách hoạt động (tạo user, tạo access code, yêu cầu mua code)
- * @access  Private/Admin
+ * @desc    Lấy danh sách hoạt động (tạo access code, yêu cầu mua code, thay đổi trạng thái)
+ * @access  Private
  */
 router.get('/', getActivities);
 

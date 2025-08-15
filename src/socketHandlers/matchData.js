@@ -313,7 +313,7 @@ function handleMatchData(io, socket, rooms, userSessions) {
             const { accessCode, futsalErrors, timestamp = Date.now() } = data;
 
             // Validate input
-            if (!accessCode || !futsalErrors ) {
+            if (!accessCode || !futsalErrors) {
                 throw new Error('Mã truy cập và lỗi không hợp lệ');
             }
 
@@ -381,40 +381,40 @@ function handleMatchData(io, socket, rooms, userSessions) {
         try {
             console.log('DEBUG - goal_scorers_update data received:', JSON.stringify(data, null, 2));
             const { accessCode, scorer, team, timestamp = Date.now() } = data;
-    
+
             if (!accessCode || !scorer || !team) {
                 throw new Error('Mã truy cập, thông tin cầu thủ ghi bàn và đội không hợp lệ');
             }
-    
+
             if (!scorer.player || scorer.minute === undefined) {
                 throw new Error('Thiếu thông tin tên cầu thủ hoặc phút ghi bàn');
             }
-    
+
             const room = rooms.get(accessCode);
             if (!room) {
                 console.log(`Room not found for access code: ${accessCode}`, { socketId: socket.id });
                 socket.emit('goal_scorers_error', { error: 'Phòng không tồn tại' });
                 return;
             }
-    
+
             const userData = userSessions.get(socket.id);
             if (!userData || !room.adminClients.has(socket.id)) {
                 console.log(`Không có quyền cập nhật scorer`);
                 socket.emit('goal_scorers_error', { error: 'Không có quyền thực hiện thao tác này' });
                 return;
             }
-    
+
             room.currentState.matchData = room.currentState.matchData || {};
             room.currentState.matchData.teamA = room.currentState.matchData.teamA || {};
             room.currentState.matchData.teamB = room.currentState.matchData.teamB || {};
-    
+
             if (!room.currentState.matchData.teamA.scorers) {
                 room.currentState.matchData.teamA.scorers = [];
             }
             if (!room.currentState.matchData.teamB.scorers) {
                 room.currentState.matchData.teamB.scorers = [];
             }
-    
+
             let teamScorers, teamField;
             if (team === "teamA") {
                 teamScorers = room.currentState.matchData.teamA.scorers;
@@ -425,9 +425,9 @@ function handleMatchData(io, socket, rooms, userSessions) {
             } else {
                 throw new Error('Team phải là "teamA" hoặc "teamB"');
             }
-    
+
             let existingPlayer = teamScorers.find(s => s.player === scorer.player);
-            
+
             if (existingPlayer) {
                 const scores = existingPlayer.score ? existingPlayer.score.split(',') : [];
                 scores.push(scorer.minute.toString());
@@ -438,18 +438,18 @@ function handleMatchData(io, socket, rooms, userSessions) {
                     score: scorer.minute.toString()
                 });
             }
-    
+
             const updateData = {
                 [teamField]: teamScorers
             };
-    
+
             const dbResult = await updateMatchInDatabase(accessCode, updateData);
             if (!dbResult.success) {
                 console.error('Failed to update database:', dbResult.error);
             }
-    
+
             room.lastActivity = timestamp;
-    
+
             io.to(`room_${accessCode}`).emit('goal_scorers_updated', {
                 team: team,
                 scorer: {
@@ -458,13 +458,13 @@ function handleMatchData(io, socket, rooms, userSessions) {
                 },
                 timestamp: timestamp
             });
-    
+
             console.log(`Goal scorer updated successfully for ${team}:`, {
                 player: scorer.player,
                 minute: scorer.minute,
                 totalScorers: teamScorers.length
             });
-    
+
         } catch (error) {
             logger.error('Error in goal_scorers_update:', error);
             socket.emit('goal_scorers_error', {
@@ -678,15 +678,15 @@ function handleMatchData(io, socket, rooms, userSessions) {
     socket.on('match_stats_update', async (data) => {
         try {
             const { accessCode, stats, timestamp = Date.now() } = data;
-    
+
             if (!accessCode || typeof accessCode !== 'string' || accessCode.trim() === '') {
                 throw new Error('Mã truy cập không hợp lệ');
             }
-    
+
             if (!stats || typeof stats !== 'object') {
                 throw new Error('Dữ liệu thống kê không hợp lệ');
             }
-    
+
             const room = rooms.get(accessCode);
             if (!room) {
                 logger.error(`Room not found for access code: ${accessCode}`, { socketId: socket.id });
@@ -696,7 +696,7 @@ function handleMatchData(io, socket, rooms, userSessions) {
                     timestamp: Date.now()
                 });
             }
-    
+
             const userData = userSessions.get(socket.id);
             if (!userData || !room.adminClients.has(socket.id)) {
                 return socket.emit('stats_error', {
@@ -705,7 +705,7 @@ function handleMatchData(io, socket, rooms, userSessions) {
                     timestamp: Date.now()
                 });
             }
-    
+
             const statToDbField = {
                 possession: {
                     team1: 'teamAPossession',
@@ -723,27 +723,23 @@ function handleMatchData(io, socket, rooms, userSessions) {
                     team1: 'teamACorners',
                     team2: 'teamBCorners'
                 },
-                yellowCards: {
-                    team1: 'teamAYellowCards',
-                    team2: 'teamBYellowCards'
-                },
                 fouls: {
                     team1: 'teamAFouls',
                     team2: 'teamBFouls'
                 }
             };
-    
+
             const updateData = {};
-            
+
             Object.entries(stats).forEach(([statKey, statValue]) => {
                 if (statToDbField[statKey]) {
                     Object.entries(statValue).forEach(([teamKey, value]) => {
                         const dbField = statToDbField[statKey][teamKey];
                         if (dbField) {
                             const intValue = parseInt(value) || 0;
-                            
+
                             updateData[dbField] = intValue;
-                            
+
                             if (room.currentState.matchStats[statKey]) {
                                 room.currentState.matchStats[statKey][teamKey] = intValue;
                             }
@@ -751,7 +747,7 @@ function handleMatchData(io, socket, rooms, userSessions) {
                     });
                 }
             });
-    
+
             if (Object.keys(updateData).length > 0) {
                 try {
                     const result = await updateMatchInDatabase(accessCode, updateData);
@@ -768,16 +764,16 @@ function handleMatchData(io, socket, rooms, userSessions) {
                     logger.error('Database update error in match_stats_update:', dbError);
                 }
             }
-    
+
             room.lastActivity = timestamp;
-    
+
             io.to(`room_${accessCode}`).emit('match_stats_updated', {
                 stats: stats,
                 timestamp: timestamp
             });
-    
+
             logger.info(`Match stats updated for room ${accessCode}`);
-    
+
         } catch (error) {
             logger.error('Error in match_stats_update:', error);
             socket.emit('match_stats_error', {
@@ -858,21 +854,23 @@ function handleMatchData(io, socket, rooms, userSessions) {
             });
         }
     });
-    
+
+    // matchData.js - Phần xử lý update_card đã được sửa chữa
+
     socket.on('update_card', async (data) => {
         try {
             console.log('DEBUG - update_card data received:', JSON.stringify(data, null, 2));
             const { accessCode, team, cardType, player, minute, timestamp = Date.now() } = data;
-    
+
             // Validate input
             if (!accessCode) {
                 throw new Error('Mã truy cập không hợp lệ');
             }
-    
+
             if (!team || !cardType || !player || minute === undefined) {
                 throw new Error('Thiếu thông tin thẻ phạt, cầu thủ hoặc phút');
             }
-    
+
             // Get room and validate
             const room = rooms.get(accessCode);
             if (!room) {
@@ -883,7 +881,7 @@ function handleMatchData(io, socket, rooms, userSessions) {
                     timestamp: Date.now()
                 });
             }
-    
+
             // Verify admin permission
             const userData = userSessions.get(socket.id);
             if (!userData || !room.adminClients.has(socket.id)) {
@@ -893,51 +891,45 @@ function handleMatchData(io, socket, rooms, userSessions) {
                     timestamp: Date.now()
                 });
             }
-    
+
             // Initialize match data structure if not exist
             room.currentState.matchData = room.currentState.matchData || {};
             room.currentState.matchData.teamA = room.currentState.matchData.teamA || {};
             room.currentState.matchData.teamB = room.currentState.matchData.teamB || {};
-    
-            // Initialize card arrays for both teams if not exist
-            if (!Array.isArray(room.currentState.matchData.teamA.yellowCards)) {
-                room.currentState.matchData.teamA.yellowCards = [];
-            }
-            if (!Array.isArray(room.currentState.matchData.teamA.redCards)) {
-                room.currentState.matchData.teamA.redCards = [];
-            }
-            if (!Array.isArray(room.currentState.matchData.teamB.yellowCards)) {
-                room.currentState.matchData.teamB.yellowCards = [];
-            }
-            if (!Array.isArray(room.currentState.matchData.teamB.redCards)) {
-                room.currentState.matchData.teamB.redCards = [];
-            }
-    
-            // Determine target cards array and database field
-            let targetCards, dbField;
-            
-            if (team === "teamA") {
-                if (cardType === "yellow") {
-                    targetCards = room.currentState.matchData.teamA.yellowCards;
-                    dbField = 'teamAYellowCards';
-                } else if (cardType === "red") {
-                    targetCards = room.currentState.matchData.teamA.redCards;
-                    dbField = 'teamARedCards';
+
+            // Initialize match stats card arrays if not exist - với kiểm tra an toàn hơn
+            room.currentState.matchStats = room.currentState.matchStats || {};
+
+            // Khởi tạo yellowCards nếu chưa có hoặc không phải object
+            if (!room.currentState.matchStats.yellowCards || typeof room.currentState.matchStats.yellowCards !== 'object' || typeof room.currentState.matchStats.yellowCards.team1 === 'number') {
+                room.currentState.matchStats.yellowCards = {
+                    team1: [],
+                    team2: []
+                };
+            } else {
+                if (!Array.isArray(room.currentState.matchStats.yellowCards.team1)) {
+                    room.currentState.matchStats.yellowCards.team1 = [];
                 }
-            } else if (team === "teamB") {
-                if (cardType === "yellow") {
-                    targetCards = room.currentState.matchData.teamB.yellowCards;
-                    dbField = 'teamBYellowCards';
-                } else if (cardType === "red") {
-                    targetCards = room.currentState.matchData.teamB.redCards;
-                    dbField = 'teamBRedCards';
+                if (!Array.isArray(room.currentState.matchStats.yellowCards.team2)) {
+                    room.currentState.matchStats.yellowCards.team2 = [];
                 }
             }
-    
-            if (!targetCards || !dbField) {
-                throw new Error('Team hoặc cardType không hợp lệ');
+
+            // Khởi tạo redCards nếu chưa có hoặc không phải object
+            if (!room.currentState.matchStats.redCards || typeof room.currentState.matchStats.redCards !== 'object' || typeof room.currentState.matchStats.redCards.team1 === 'number') {
+                room.currentState.matchStats.redCards = {
+                    team1: [],
+                    team2: []
+                };
+            } else {
+                if (!Array.isArray(room.currentState.matchStats.redCards.team1)) {
+                    room.currentState.matchStats.redCards.team1 = [];
+                }
+                if (!Array.isArray(room.currentState.matchStats.redCards.team2)) {
+                    room.currentState.matchStats.redCards.team2 = [];
+                }
             }
-    
+
             // Create new card data object
             const cardData = {
                 playerId: player.id || null,
@@ -945,15 +937,57 @@ function handleMatchData(io, socket, rooms, userSessions) {
                 minute: parseInt(minute) || 0,
                 timestamp: timestamp
             };
-    
-            // Check for duplicate cards (optional - remove if you want to allow duplicates)
-            const isDuplicate = targetCards.some(card => 
-                card.playerId === cardData.playerId && 
+
+            // Debug: Log current matchStats structure
+            console.log('Current matchStats structure:', JSON.stringify(room.currentState.matchStats, null, 2));
+            console.log('Team:', team, 'CardType:', cardType);
+
+            // Determine target arrays for matchStats only
+            let statsCards, dbField;
+
+            if (team === "teamA") {
+                if (cardType === "yellow") {
+                    console.log('Accessing yellowCards.team1:', room.currentState.matchStats.yellowCards?.team1);
+                    statsCards = room.currentState.matchStats.yellowCards.team1;
+                    dbField = 'teamAYellowCards';
+                } else if (cardType === "red") {
+                    console.log('Accessing redCards.team1:', room.currentState.matchStats.redCards?.team1);
+                    statsCards = room.currentState.matchStats.redCards.team1;
+                    dbField = 'teamARedCards';
+                }
+            } else if (team === "teamB") {
+                if (cardType === "yellow") {
+                    console.log('Accessing yellowCards.team2:', room.currentState.matchStats.yellowCards?.team2);
+                    statsCards = room.currentState.matchStats.yellowCards.team2;
+                    dbField = 'teamBYellowCards';
+                } else if (cardType === "red") {
+                    console.log('Accessing redCards.team2:', room.currentState.matchStats.redCards?.team2);
+                    statsCards = room.currentState.matchStats.redCards.team2;
+                    dbField = 'teamBRedCards';
+                }
+            }
+
+            console.log('statsCards:', statsCards, 'dbField:', dbField);
+
+            if (!statsCards || !dbField) {
+                console.log('Error details:', {
+                    statsCardsUndefined: !statsCards,
+                    dbFieldUndefined: !dbField,
+                    team: team,
+                    cardType: cardType,
+                    matchStatsStructure: Object.keys(room.currentState.matchStats)
+                });
+                throw new Error('Team hoặc cardType không hợp lệ');
+            }
+
+            // Check for duplicate cards
+            const isDuplicateStats = statsCards.some(card =>
+                card.playerId === cardData.playerId &&
                 card.minute === cardData.minute &&
                 Math.abs(card.timestamp - cardData.timestamp) < 1000 // Within 1 second
             );
-    
-            if (isDuplicate) {
+
+            if (isDuplicateStats) {
                 logger.warn(`Duplicate card detected for ${team} ${cardType}:`, cardData);
                 return socket.emit('update_card_error', {
                     error: 'Thẻ phạt đã được thêm trước đó',
@@ -961,32 +995,31 @@ function handleMatchData(io, socket, rooms, userSessions) {
                     timestamp: Date.now()
                 });
             }
-    
-            // Add new card to the array
-            targetCards.push(cardData);
-    
+
+            // Add new card to stats array
+            statsCards.push(cardData);
+
             // Sort cards by minute for better organization
-            targetCards.sort((a, b) => a.minute - b.minute);
-    
-            console.log(`Added ${cardType} card for ${team}. Total cards:`, targetCards.length);
-            console.log('Current cards array:', targetCards);
-    
-            // Prepare database update
+            statsCards.sort((a, b) => a.minute - b.minute);
+
+            console.log(`Added ${cardType} card for ${team}. Total stats cards:`, statsCards.length);
+
+            // Prepare database update - sử dụng statsCards để lưu vào database
             const updateData = {
-                [dbField]: targetCards
+                [dbField]: statsCards
             };
-    
+
             // Update database
             const dbResult = await updateMatchInDatabase(accessCode, updateData);
             if (!dbResult.success) {
                 logger.error('Failed to update database:', dbResult.error);
-                // Rollback the change
-                targetCards.pop();
+                // Rollback the changes
+                statsCards.pop();
                 throw new Error('Không thể cập nhật cơ sở dữ liệu');
             }
-    
+
             room.lastActivity = timestamp;
-    
+
             // Broadcast to all clients in the room
             io.to(`room_${accessCode}`).emit('card_updated', {
                 team: team,
@@ -996,23 +1029,152 @@ function handleMatchData(io, socket, rooms, userSessions) {
                     name: cardData.playerName
                 },
                 minute: cardData.minute,
-                totalCards: targetCards.length,
-                allCards: targetCards, // Send all cards for this team/type
+                totalCards: statsCards.length,
+                allStatsCards: statsCards,          // Cards từ stats
                 timestamp: timestamp
             });
-    
+
             logger.info(`${cardType} card added for ${team}:`, {
                 player: cardData.playerName,
                 minute: cardData.minute,
-                totalCardsOfThisType: targetCards.length
+                totalStatsCards: statsCards.length
             });
-    
+
         } catch (error) {
             logger.error('Error in update_card:', error);
             socket.emit('update_card_error', {
                 error: 'Lỗi khi cập nhật thẻ phạt',
                 details: error.message,
                 timestamp: Date.now()
+            });
+        }
+    });
+
+    // Cập nhật phần match_stats_update để xử lý yellowCards và redCards như mảng
+    socket.on('match_stats_update', async (data) => {
+        try {
+            const { accessCode, stats, timestamp = Date.now() } = data;
+
+            if (!accessCode || typeof accessCode !== 'string' || accessCode.trim() === '') {
+                throw new Error('Mã truy cập không hợp lệ');
+            }
+
+            if (!stats || typeof stats !== 'object') {
+                throw new Error('Dữ liệu thống kê không hợp lệ');
+            }
+
+            const room = rooms.get(accessCode);
+            if (!room) {
+                logger.error(`Room not found for access code: ${accessCode}`, { socketId: socket.id });
+                return socket.emit('stats_error', {
+                    error: 'Không tìm thấy phòng. Vui lòng thử lại sau khi tham gia phòng.',
+                    code: 'ROOM_NOT_FOUND',
+                    timestamp: Date.now()
+                });
+            }
+
+            const userData = userSessions.get(socket.id);
+            if (!userData || !room.adminClients.has(socket.id)) {
+                return socket.emit('stats_error', {
+                    error: 'Bạn không có quyền cập nhật thống kê',
+                    code: 'UNAUTHORIZED',
+                    timestamp: Date.now()
+                });
+            }
+
+            const statToDbField = {
+                possession: {
+                    team1: 'teamAPossession',
+                    team2: 'teamBPossession'
+                },
+                totalShots: {
+                    team1: 'teamAShots',
+                    team2: 'teamBShots'
+                },
+                shotsOnTarget: {
+                    team1: 'teamAShotsOnTarget',
+                    team2: 'teamBShotsOnTarget'
+                },
+                corners: {
+                    team1: 'teamACorners',
+                    team2: 'teamBCorners'
+                },
+                fouls: {
+                    team1: 'teamAFouls',
+                    team2: 'teamBFouls'
+                },
+                // Thêm xử lý cho yellowCards và redCards như mảng
+                yellowCards: {
+                    team1: 'teamAYellowCards',
+                    team2: 'teamBYellowCards'
+                },
+                redCards: {
+                    team1: 'teamARedCards',
+                    team2: 'teamBRedCards'
+                }
+            };
+
+            const updateData = {};
+
+            Object.entries(stats).forEach(([statKey, statValue]) => {
+                if (statToDbField[statKey]) {
+                    Object.entries(statValue).forEach(([teamKey, value]) => {
+                        const dbField = statToDbField[statKey][teamKey];
+                        if (dbField) {
+                            // Xử lý khác nhau cho số và mảng
+                            if (statKey === 'yellowCards' || statKey === 'redCards') {
+                                // Đối với thẻ phạt, giá trị là mảng
+                                const arrayValue = Array.isArray(value) ? value : [];
+                                updateData[dbField] = arrayValue;
+
+                                if (room.currentState.matchStats[statKey]) {
+                                    room.currentState.matchStats[statKey][teamKey] = arrayValue;
+                                }
+                            } else {
+                                // Đối với các thống kê khác, giá trị là số
+                                const intValue = parseInt(value) || 0;
+                                updateData[dbField] = intValue;
+
+                                if (room.currentState.matchStats[statKey]) {
+                                    room.currentState.matchStats[statKey][teamKey] = intValue;
+                                }
+                            }
+                        }
+                    });
+                }
+            });
+
+            if (Object.keys(updateData).length > 0) {
+                try {
+                    const result = await updateMatchInDatabase(accessCode, updateData);
+                    if (!result.success) {
+                        logger.error(`Failed to update match stats in database: ${result.error}`, {
+                            accessCode,
+                            updateData,
+                            details: result.details
+                        });
+                    } else {
+                        logger.info(`Match stats updated in database for access code: ${accessCode}`);
+                    }
+                } catch (dbError) {
+                    logger.error('Database update error in match_stats_update:', dbError);
+                }
+            }
+
+            room.lastActivity = timestamp;
+
+            io.to(`room_${accessCode}`).emit('match_stats_updated', {
+                stats: stats,
+                timestamp: timestamp
+            });
+
+            logger.info(`Match stats updated for room ${accessCode}`);
+
+        } catch (error) {
+            logger.error('Error in match_stats_update:', error);
+            socket.emit('match_stats_error', {
+                error: 'Lỗi khi cập nhật thống kê trận đấu',
+                details: error.message
             });
         }
     });

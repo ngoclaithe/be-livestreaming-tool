@@ -75,7 +75,7 @@ function handleAudioUpdates(io, socket, rooms, userSessions) {
       if (target === 'all') {
         io.to(`room_${accessCode}`).emit('audio_control', controlMessage);
       } else if (['client', 'admin', 'display'].includes(target)) {
-        console.log('Vừa gửi xong nèeee');
+        // console.log('Vừa gửi xong nèeee');
         io.to(`room_${accessCode}`).emit('audio_control', {
           ...controlMessage,
           target: target
@@ -84,10 +84,10 @@ function handleAudioUpdates(io, socket, rooms, userSessions) {
         io.to(target).emit('audio_control', controlMessage);
       }
       
-      logger.info(`Audio control broadcasted: ${command} to ${target} in room ${accessCode}`);
+      // logger.info(`Audio control broadcasted: ${command} to ${target} in room ${accessCode}`);
       
     } catch (error) {
-      logger.error('Error in audio_control_broadcast:', error);
+      // logger.error('Error in audio_control_broadcast:', error);
       socket.emit('audio_control_error', {
         error: 'Lỗi khi xử lý điều khiển âm thanh',
         details: error.message,
