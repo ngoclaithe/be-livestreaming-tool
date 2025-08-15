@@ -675,20 +675,18 @@ function handleMatchData(io, socket, rooms, userSessions) {
     });
 
     // Match stats update
-    socket.on('match_stats_update', (data) => {
+    socket.on('match_stats_update', async (data) => {
         try {
             const { accessCode, stats, timestamp = Date.now() } = data;
-
-            // Validate input
+    
             if (!accessCode || typeof accessCode !== 'string' || accessCode.trim() === '') {
                 throw new Error('Mã truy cập không hợp lệ');
             }
-
+    
             if (!stats || typeof stats !== 'object') {
                 throw new Error('Dữ liệu thống kê không hợp lệ');
             }
-
-            // Get room and validate
+    
             const room = rooms.get(accessCode);
             if (!room) {
                 logger.error(`Room not found for access code: ${accessCode}`, { socketId: socket.id });
@@ -698,8 +696,7 @@ function handleMatchData(io, socket, rooms, userSessions) {
                     timestamp: Date.now()
                 });
             }
-
-            // Verify admin permission
+    
             const userData = userSessions.get(socket.id);
             if (!userData || !room.adminClients.has(socket.id)) {
                 return socket.emit('stats_error', {
@@ -708,39 +705,79 @@ function handleMatchData(io, socket, rooms, userSessions) {
                     timestamp: Date.now()
                 });
             }
-
-            // Map teamA/teamB to team1/team2 for internal storage
-            const statMappings = {
-                possession: { teamA: 'team1', teamB: 'team2' },
-                totalShots: { teamA: 'team1', teamB: 'team2' },
-                shotsOnTarget: { teamA: 'team1', teamB: 'team2' },
-                corners: { teamA: 'team1', teamB: 'team2' },
-                yellowCards: { teamA: 'team1', teamB: 'team2' },
-                fouls: { teamA: 'team1', teamB: 'team2' }
+    
+            const statToDbField = {
+                possession: {
+                    team1: 'teamAPossession',
+                    team2: 'teamBPossession'
+                },
+                totalShots: {
+                    team1: 'teamAShots',
+                    team2: 'teamBShots'
+                },
+                shotsOnTarget: {
+                    team1: 'teamAShotsOnTarget',
+                    team2: 'teamBShotsOnTarget'
+                },
+                corners: {
+                    team1: 'teamACorners',
+                    team2: 'teamBCorners'
+                },
+                yellowCards: {
+                    team1: 'teamAYellowCards',
+                    team2: 'teamBYellowCards'
+                },
+                fouls: {
+                    team1: 'teamAFouls',
+                    team2: 'teamBFouls'
+                }
             };
-
-            // Update stats with new teamA/teamB structure
+    
+            const updateData = {};
+            
             Object.entries(stats).forEach(([statKey, statValue]) => {
-                if (room.currentState.matchStats[statKey]) {
+                if (statToDbField[statKey]) {
                     Object.entries(statValue).forEach(([teamKey, value]) => {
-                        const internalTeamKey = statMappings[statKey]?.[teamKey];
-                        if (internalTeamKey && room.currentState.matchStats[statKey][internalTeamKey] !== undefined) {
-                            room.currentState.matchStats[statKey][internalTeamKey] = parseInt(value) || 0;
+                        const dbField = statToDbField[statKey][teamKey];
+                        if (dbField) {
+                            const intValue = parseInt(value) || 0;
+                            
+                            updateData[dbField] = intValue;
+                            
+                            if (room.currentState.matchStats[statKey]) {
+                                room.currentState.matchStats[statKey][teamKey] = intValue;
+                            }
                         }
                     });
                 }
             });
-
+    
+            if (Object.keys(updateData).length > 0) {
+                try {
+                    const result = await updateMatchInDatabase(accessCode, updateData);
+                    if (!result.success) {
+                        logger.error(`Failed to update match stats in database: ${result.error}`, {
+                            accessCode,
+                            updateData,
+                            details: result.details
+                        });
+                    } else {
+                        logger.info(`Match stats updated in database for access code: ${accessCode}`);
+                    }
+                } catch (dbError) {
+                    logger.error('Database update error in match_stats_update:', dbError);
+                }
+            }
+    
             room.lastActivity = timestamp;
-
-            // Broadcast to all clients in the room
+    
             io.to(`room_${accessCode}`).emit('match_stats_updated', {
                 stats: stats,
                 timestamp: timestamp
             });
-
+    
             logger.info(`Match stats updated for room ${accessCode}`);
-
+    
         } catch (error) {
             logger.error('Error in match_stats_update:', error);
             socket.emit('match_stats_error', {
@@ -821,7 +858,164 @@ function handleMatchData(io, socket, rooms, userSessions) {
             });
         }
     });
-
+    
+    socket.on('update_card', async (data) => {
+        try {
+            console.log('DEBUG - update_card data received:', JSON.stringify(data, null, 2));
+            const { accessCode, team, cardType, player, minute, timestamp = Date.now() } = data;
+    
+            // Validate input
+            if (!accessCode) {
+                throw new Error('Mã truy cập không hợp lệ');
+            }
+    
+            if (!team || !cardType || !player || minute === undefined) {
+                throw new Error('Thiếu thông tin thẻ phạt, cầu thủ hoặc phút');
+            }
+    
+            // Get room and validate
+            const room = rooms.get(accessCode);
+            if (!room) {
+                logger.error(`Room not found for access code: ${accessCode}`, { socketId: socket.id });
+                return socket.emit('update_card_error', {
+                    error: 'Không tìm thấy phòng. Vui lòng thử lại sau khi tham gia phòng.',
+                    code: 'ROOM_NOT_FOUND',
+                    timestamp: Date.now()
+                });
+            }
+    
+            // Verify admin permission
+            const userData = userSessions.get(socket.id);
+            if (!userData || !room.adminClients.has(socket.id)) {
+                return socket.emit('update_card_error', {
+                    error: 'Bạn không có quyền cập nhật thẻ phạt',
+                    code: 'UNAUTHORIZED',
+                    timestamp: Date.now()
+                });
+            }
+    
+            // Initialize match data structure if not exist
+            room.currentState.matchData = room.currentState.matchData || {};
+            room.currentState.matchData.teamA = room.currentState.matchData.teamA || {};
+            room.currentState.matchData.teamB = room.currentState.matchData.teamB || {};
+    
+            // Initialize card arrays for both teams if not exist
+            if (!Array.isArray(room.currentState.matchData.teamA.yellowCards)) {
+                room.currentState.matchData.teamA.yellowCards = [];
+            }
+            if (!Array.isArray(room.currentState.matchData.teamA.redCards)) {
+                room.currentState.matchData.teamA.redCards = [];
+            }
+            if (!Array.isArray(room.currentState.matchData.teamB.yellowCards)) {
+                room.currentState.matchData.teamB.yellowCards = [];
+            }
+            if (!Array.isArray(room.currentState.matchData.teamB.redCards)) {
+                room.currentState.matchData.teamB.redCards = [];
+            }
+    
+            // Determine target cards array and database field
+            let targetCards, dbField;
+            
+            if (team === "teamA") {
+                if (cardType === "yellow") {
+                    targetCards = room.currentState.matchData.teamA.yellowCards;
+                    dbField = 'teamAYellowCards';
+                } else if (cardType === "red") {
+                    targetCards = room.currentState.matchData.teamA.redCards;
+                    dbField = 'teamARedCards';
+                }
+            } else if (team === "teamB") {
+                if (cardType === "yellow") {
+                    targetCards = room.currentState.matchData.teamB.yellowCards;
+                    dbField = 'teamBYellowCards';
+                } else if (cardType === "red") {
+                    targetCards = room.currentState.matchData.teamB.redCards;
+                    dbField = 'teamBRedCards';
+                }
+            }
+    
+            if (!targetCards || !dbField) {
+                throw new Error('Team hoặc cardType không hợp lệ');
+            }
+    
+            // Create new card data object
+            const cardData = {
+                playerId: player.id || null,
+                playerName: player.name || 'Unknown Player',
+                minute: parseInt(minute) || 0,
+                timestamp: timestamp
+            };
+    
+            // Check for duplicate cards (optional - remove if you want to allow duplicates)
+            const isDuplicate = targetCards.some(card => 
+                card.playerId === cardData.playerId && 
+                card.minute === cardData.minute &&
+                Math.abs(card.timestamp - cardData.timestamp) < 1000 // Within 1 second
+            );
+    
+            if (isDuplicate) {
+                logger.warn(`Duplicate card detected for ${team} ${cardType}:`, cardData);
+                return socket.emit('update_card_error', {
+                    error: 'Thẻ phạt đã được thêm trước đó',
+                    code: 'DUPLICATE_CARD',
+                    timestamp: Date.now()
+                });
+            }
+    
+            // Add new card to the array
+            targetCards.push(cardData);
+    
+            // Sort cards by minute for better organization
+            targetCards.sort((a, b) => a.minute - b.minute);
+    
+            console.log(`Added ${cardType} card for ${team}. Total cards:`, targetCards.length);
+            console.log('Current cards array:', targetCards);
+    
+            // Prepare database update
+            const updateData = {
+                [dbField]: targetCards
+            };
+    
+            // Update database
+            const dbResult = await updateMatchInDatabase(accessCode, updateData);
+            if (!dbResult.success) {
+                logger.error('Failed to update database:', dbResult.error);
+                // Rollback the change
+                targetCards.pop();
+                throw new Error('Không thể cập nhật cơ sở dữ liệu');
+            }
+    
+            room.lastActivity = timestamp;
+    
+            // Broadcast to all clients in the room
+            io.to(`room_${accessCode}`).emit('card_updated', {
+                team: team,
+                cardType: cardType,
+                player: {
+                    id: cardData.playerId,
+                    name: cardData.playerName
+                },
+                minute: cardData.minute,
+                totalCards: targetCards.length,
+                allCards: targetCards, // Send all cards for this team/type
+                timestamp: timestamp
+            });
+    
+            logger.info(`${cardType} card added for ${team}:`, {
+                player: cardData.playerName,
+                minute: cardData.minute,
+                totalCardsOfThisType: targetCards.length
+            });
+    
+        } catch (error) {
+            logger.error('Error in update_card:', error);
+            socket.emit('update_card_error', {
+                error: 'Lỗi khi cập nhật thẻ phạt',
+                details: error.message,
+                timestamp: Date.now()
+            });
+        }
+    });
     // Marquee updates
     socket.on('marquee_update', (data) => {
         try {

@@ -33,7 +33,7 @@ function createNewRoom(accessCode) {
         stadium: "",
         matchDate: "",
         liveText: "",
-        typeMatch: "" // Default typeMatch
+        typeMatch: "" 
       },
       matchStats: {
         possession: { team1: 50, team2: 50 },
@@ -128,14 +128,30 @@ async function loadRoomData(accessCode) {
         attendance: match.attendance,
         liveText: match.live_unit,
         stats: {
-          possession: match.possession || { home: 50, away: 50 },
-          shots: match.shots || { home: 0, away: 0 },
-          shotsOnTarget: match.shotsOnTarget || { home: 0, away: 0 },
-          corners: match.corners || { home: 0, away: 0 },
-          fouls: match.fouls || { home: 0, away: 0 },
-          offsides: match.offsides || { home: 0, away: 0 },
-          yellowCards: match.yellowCards || { home: 0, away: 0 },
-          redCards: match.redCards || { home: 0, away: 0 }
+          possession: {
+            team1: match.teamAPossession || 50,
+            team2: match.teamBPossession || 50
+          },
+          totalShots: {
+            team1: match.teamAShots || 0,
+            team2: match.teamBShots || 0
+          },
+          shotsOnTarget: {
+            team1: match.teamAShotsOnTarget || 0,
+            team2: match.teamBShotsOnTarget || 0
+          },
+          corners: {
+            team1: match.teamACorners || 0,
+            team2: match.teamBCorners || 0
+          },
+          yellowCards: {
+            team1: match.teamAYellowCards || 0,
+            team2: match.teamBYellowCards || 0
+          },
+          fouls: {
+            team1: match.teamAFouls || 0,
+            team2: match.teamBFouls || 0
+          }
         },
         metadata: match.metadata
       };
@@ -188,28 +204,28 @@ function mergeRoomDataWithState(roomState, loadedData) {
     if (match.stats) {
       roomState.currentState.matchStats = {
         possession: {
-          team1: match.stats.possession.home || 50,
-          team2: match.stats.possession.away || 50
+          team1: match.stats.possession.team1 || 50,
+          team2: match.stats.possession.team2 || 50
         },
         totalShots: {
-          team1: match.stats.shots.home || 0,
-          team2: match.stats.shots.away || 0
+          team1: match.stats.totalShots.team1 || 0,
+          team2: match.stats.totalShots.team2 || 0
         },
         shotsOnTarget: {
-          team1: match.stats.shotsOnTarget.home || 0,
-          team2: match.stats.shotsOnTarget.away || 0
+          team1: match.stats.shotsOnTarget.team1 || 0,
+          team2: match.stats.shotsOnTarget.team2 || 0
         },
         corners: {
-          team1: match.stats.corners.home || 0,
-          team2: match.stats.corners.away || 0
+          team1: match.stats.corners.team1 || 0,
+          team2: match.stats.corners.team2 || 0
         },
         yellowCards: {
-          team1: match.stats.yellowCards.home || 0,
-          team2: match.stats.yellowCards.away || 0
+          team1: match.stats.yellowCards.team1 || 0,
+          team2: match.stats.yellowCards.team2 || 0
         },
         fouls: {
-          team1: match.stats.fouls.home || 0,
-          team2: match.stats.fouls.away || 0
+          team1: match.stats.fouls.team1 || 0,
+          team2: match.stats.fouls.team2 || 0
         }
       };
     }
