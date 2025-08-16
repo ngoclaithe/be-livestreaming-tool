@@ -1,10 +1,6 @@
 const logger = require('../utils/logger');
 
-/**
- * Handles all view-related socket events
- */
 function handleViewUpdates(io, socket, rooms, userSessions) {
-  // Main view update event - changes the current view
   socket.on('view_update', (data) => {
     console.log("Giá trị nhận được là:", data);
     try {
@@ -14,7 +10,6 @@ function handleViewUpdates(io, socket, rooms, userSessions) {
       
       const { accessCode, viewType, timestamp = Date.now() } = data;
       
-      // Validate input
       if (!accessCode || typeof accessCode !== 'string' || accessCode.trim() === '') {
         throw new Error('Mã truy cập không hợp lệ');
       }
@@ -23,7 +18,6 @@ function handleViewUpdates(io, socket, rooms, userSessions) {
         throw new Error('Loại giao diện không hợp lệ');
       }
       
-      // Get room and validate
       const room = rooms.get(accessCode);
       if (!room) {
         logger.error(`Room not found for access code: ${accessCode}`, { socketId: socket.id });
@@ -34,7 +28,6 @@ function handleViewUpdates(io, socket, rooms, userSessions) {
         });
       }
       
-      // Verify admin permission
       const userData = userSessions.get(socket.id);
       if (!userData || !room.adminClients.has(socket.id)) {
         return socket.emit('view_error', {
@@ -49,18 +42,15 @@ function handleViewUpdates(io, socket, rooms, userSessions) {
         timestamp: timestamp
       });
       
-      // Update room state with the new view type
       room.currentState.view = viewType;
       room.lastActivity = timestamp;
       
-      // Broadcast to all clients in the room EXCEPT the sender
       socket.to(`room_${accessCode}`).emit('view_updated', {
         viewType: viewType,
         timestamp: timestamp,
         accessCode: accessCode
       });
       
-      // Also send to the sender (for consistency)
       socket.emit('view_updated', {
         viewType: viewType,
         timestamp: timestamp,
@@ -78,7 +68,6 @@ function handleViewUpdates(io, socket, rooms, userSessions) {
     }
   });
   
-  // Poster update
   socket.on('poster_update', (data) => {
     try {
       console.log('📢 Nhận yêu cầu cập nhật poster:', data);
@@ -87,10 +76,6 @@ function handleViewUpdates(io, socket, rooms, userSessions) {
       if (!accessCode || typeof accessCode !== 'string' || accessCode.trim() === '') {
         throw new Error('Mã truy cập không hợp lệ');
       }
-      
-      // if (!posterType || typeof posterType !== 'string' || !['tretrung', 'haoquang', 'xanhduong', 'vangxanh', 'doden', 'vangkim'].includes(posterType)) {
-      //   throw new Error('Loại poster không hợp lệ. Các loại hợp lệ: tretrung, haoquang, xanhduong, vangxanh, doden, vangkim');
-      // }
       
       const room = rooms.get(accessCode);
       if (!room) {
@@ -101,23 +86,11 @@ function handleViewUpdates(io, socket, rooms, userSessions) {
           timestamp: Date.now()
         });
       }
-      
-      // Verify admin permission
-      // const userData = userSessions.get(socket.id);
-      // if (!userData || !room.adminClients.has(socket.id)) {
-      //   return socket.emit('poster_error', {
-      //     error: 'Bạn không có quyền thay đổi poster',
-      //     code: 'UNAUTHORIZED',
-      //     timestamp: Date.now()
-      //   });
-      // }
-      
-      // Update room state with the new poster
+            
       console.log(`🔄 Đang cập nhật poster từ '${room.currentState.displaySettings.selectedPoster}' sang '${posterType}'`);
       room.currentState.displaySettings.selectedPoster = posterType;
       room.lastActivity = timestamp;
       
-      // Broadcast to all clients in the room
       const updateData = {
         posterType: posterType,
         timestamp: timestamp,
@@ -142,7 +115,6 @@ function handleViewUpdates(io, socket, rooms, userSessions) {
     try {
       const { accessCode, templateId, timestamp = Date.now() } = data;
       
-      // Validate input
       if (!accessCode || typeof accessCode !== 'string' || accessCode.trim() === '') {
         throw new Error('Mã truy cập không hợp lệ');
       }

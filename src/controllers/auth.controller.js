@@ -6,6 +6,8 @@ const crypto = require('crypto');
 const logger = require('../utils/logger');
 const config = require('../config');
 const jwt = require('jsonwebtoken');
+const { Op } = require('sequelize'); // Import Op từ sequelize
+
 // @desc    Register user
 // @route   POST /api/v1/auth/register
 // @access  Public
@@ -28,7 +30,7 @@ exports.register = async (req, res, next) => {
       success: true,
       token,
       user: {
-        id: user._id,
+        id: user.id, // Sử dụng user.id thay vì user._id
         name: user.name,
         email: user.email,
         role: user.role,
@@ -90,7 +92,7 @@ exports.login = async (req, res, next) => {
       success: true,
       token,
       user: {
-        id: user._id,
+        id: user.id, // Sử dụng user.id thay vì user._id
         name: user.name,
         email: user.email,
         role: user.role,
@@ -102,18 +104,19 @@ exports.login = async (req, res, next) => {
     next(error);
   }
 };
+
 // @desc    Get current logged in user
 // @route   GET /api/v1/auth/me
 // @access  Private
 exports.getMe = async (req, res, next) => {
   try {
-    // Nếu dùng Sequelize
     const user = await User.findOne({
       where: { 
         id: req.user.id,
-        is_active: true  // Chỉ lấy user đang active
+        is_active: true
       }
     });
+    
     if (!user) {
       return next(
         new ApiError('Không tìm thấy người dùng hoặc tài khoản đã bị khóa', StatusCodes.NOT_FOUND)
@@ -147,9 +150,15 @@ exports.updateDetails = async (req, res, next) => {
       email: req.body.email
     };
 
-    const user = await User.findByIdAndUpdate(req.user.id, fieldsToUpdate, {
-      new: true,
-      runValidators: true
+    // Sử dụng Sequelize syntax
+    const [updatedRowsCount] = await User.update(fieldsToUpdate, {
+      where: { id: req.user.id },
+      returning: true // PostgreSQL only, for other DB use separate findOne
+    });
+
+    // Lấy user đã update
+    const user = await User.findOne({
+      where: { id: req.user.id }
     });
 
     res.status(StatusCodes.OK).json({
@@ -167,7 +176,17 @@ exports.updateDetails = async (req, res, next) => {
 // @access  Private
 exports.updatePassword = async (req, res, next) => {
   try {
-    const user = await User.findById(req.user.id).select('+password');
+    // Sử dụng Sequelize syntax để lấy user với password
+    const user = await User.findOne({
+      where: { id: req.user.id },
+      attributes: { include: ['password'] }
+    });
+
+    if (!user) {
+      return next(
+        new ApiError('Không tìm thấy người dùng', StatusCodes.NOT_FOUND)
+      );
+    }
 
     // Check current password
     if (!(await user.matchPassword(req.body.currentPassword))) {
@@ -176,6 +195,7 @@ exports.updatePassword = async (req, res, next) => {
       );
     }
 
+    // Update password
     user.password = req.body.newPassword;
     await user.save();
 
@@ -186,7 +206,7 @@ exports.updatePassword = async (req, res, next) => {
       success: true,
       token,
       user: {
-        id: user._id,
+        id: user.id, // Sử dụng user.id thay vì user._id
         name: user.name,
         email: user.email,
         role: user.role,
@@ -204,7 +224,9 @@ exports.updatePassword = async (req, res, next) => {
 // @access  Public
 exports.forgotPassword = async (req, res, next) => {
   try {
-    const user = await User.findOne({ email: req.body.email });
+    const user = await User.findOne({ 
+      where: { email: req.body.email } // Sử dụng Sequelize syntax
+    });
 
     if (!user) {
       return next(
@@ -215,7 +237,7 @@ exports.forgotPassword = async (req, res, next) => {
     // Get reset token
     const resetToken = user.getResetPasswordToken();
 
-    await user.save({ validateBeforeSave: false });
+    await user.save({ validate: false }); // Sequelize syntax
 
     // Create reset URL
     const resetUrl = `${req.protocol}://${req.get(
@@ -231,9 +253,11 @@ exports.forgotPassword = async (req, res, next) => {
     });
   } catch (error) {
     logger.error(`Forgot password error: ${error.message}`);
-    user.resetPasswordToken = undefined;
-    user.resetPasswordExpire = undefined;
-    await user.save({ validateBeforeSave: false });
+    if (user) {
+      user.resetPasswordToken = undefined;
+      user.resetPasswordExpire = undefined;
+      await user.save({ validate: false });
+    }
     next(error);
   }
 };
@@ -249,9 +273,12 @@ exports.resetPassword = async (req, res, next) => {
       .update(req.params.resettoken)
       .digest('hex');
 
+    // Sử dụng Sequelize syntax với Op.gt
     const user = await User.findOne({
-      resetPasswordToken,
-      resetPasswordExpire: { $gt: Date.now() }
+      where: {
+        resetPasswordToken,
+        resetPasswordExpire: { [Op.gt]: Date.now() }
+      }
     });
 
     if (!user) {
@@ -271,7 +298,7 @@ exports.resetPassword = async (req, res, next) => {
       success: true,
       token,
       user: {
-        id: user._id,
+        id: user.id, // Sử dụng user.id thay vì user._id
         name: user.name,
         email: user.email,
         role: user.role,
