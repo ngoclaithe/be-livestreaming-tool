@@ -150,7 +150,6 @@ async function updateDisplaySettings(accessCode, type, items) {
       }
     }
     
-    // Chờ tất cả các thao tác cập nhật hoàn thành
     if (updatePromises.length > 0) {
       const results = await Promise.all(updatePromises);
       console.log(`✅ Đã cập nhật thành công ${results.length} bản ghi`);
@@ -188,12 +187,11 @@ function handleDisplaySettings(io, socket, rooms, userSessions) {
 
       if (!room.currentState.displaySettings) {
         room.currentState.displaySettings = {
-          logoShape: 'square',  // Default value
-          rotateDisplay: false  // Default value
+          logoShape: 'square',  
+          rotateDisplay: false  
         };
       }
 
-      // Update display settings
       if (displaySettings.logoShape !== undefined) {
         room.currentState.displaySettings.logoShape = displaySettings.logoShape;
       }
@@ -635,97 +633,6 @@ function handleDisplaySettings(io, socket, rooms, userSessions) {
     }
   });
 
-  // socket.on('match_info_update', async (data) => {
-  //   console.log("Giá trị match_info_update là:", data);
-  //   try {
-  //     const { accessCode, matchInfo, timestamp = Date.now() } = data;
-
-  //     if (!accessCode || !matchInfo) {
-  //       throw new Error('Access code and match info are required');
-  //     }
-
-  //     const room = rooms.get(accessCode);
-  //     if (!room) {
-  //       throw new Error('Room not found');
-  //     }
-
-  //     const userData = userSessions.get(socket.id);
-  //     if (!userData || !room.adminClients.has(socket.id)) {
-  //       throw new Error('Unauthorized: Only admin can update match info');
-  //     }
-
-  //     // Cập nhật database trước
-  //     const updatedMatch = await updateMatchInfo(accessCode, matchInfo);
-
-  //     // Sau đó cập nhật room state
-  //     const fieldsToUpdate = [
-  //       'tournament', 'stadium', 'matchDate', 'liveText', 'startTime', 'matchTitle',
-  //       'teamAkitcolor', 'teamBkitcolor', 'teamA2kitcolor', 'teamB2kitcolor' 
-  //     ];
-  //     fieldsToUpdate.forEach(field => {
-  //       if (matchInfo[field] !== undefined) {
-  //         if (field === 'teamAkitcolor') {
-  //           room.currentState.matchData.teamA.teamAKitColor = matchInfo[field];
-  //         } else if (field === 'teamBkitcolor') {
-  //           room.currentState.matchData.teamB.teamBKitColor = matchInfo[field];
-  //         } else if (field === 'teamA2kitcolor') {
-  //           room.currentState.matchData.teamA.teamA2KitColor = matchInfo[field];
-  //         } else if (field === 'teamB2kitcolor') {
-  //           room.currentState.matchData.teamB.teamB2KitColor = matchInfo[field];
-  //         } else {
-  //           // Các field khác vẫn cập nhật ở level gốc
-  //           room.currentState.matchData[field] = matchInfo[field];
-  //         }
-  //       }
-  //     });    
-
-  //     room.lastActivity = timestamp;
-
-  //     const responseMatchInfo = {};
-  //     const possibleFields = [
-  //       'tournament', 'stadium', 'matchDate', 'liveText', 'startTime', 'matchTitle',
-  //       'teamAkitcolor', 'teamBkitcolor', 'teamA2kitcolor', 'teamB2kitcolor'  
-  //     ]
-  //     possibleFields.forEach(field => {
-  //       if (room.currentState.matchData[field] !== undefined) {
-  //         responseMatchInfo[field] = room.currentState.matchData[field];
-  //       } else {
-  //         console.log(`❌ ${field} undefined trong room state`);
-  //       }
-  //     });
-
-  //     // Gửi thông tin match đã được cập nhật từ database
-  //     responseMatchInfo.matchId = updatedMatch.id;
-  //     responseMatchInfo.updatedAt = updatedMatch.updatedAt;
-
-  //     if (room.currentState.matchData.teamA?.teamAKitColor) {
-  //       responseMatchInfo.teamAkitcolor = room.currentState.matchData.teamA.teamAKitColor;
-  //     }
-  //     if (room.currentState.matchData.teamB?.teamBKitColor) {
-  //       responseMatchInfo.teamBkitcolor = room.currentState.matchData.teamB.teamBKitColor;
-  //     }
-  //     if (room.currentState.matchData.teamA?.teamA2KitColor) {
-  //       responseMatchInfo.teamA2kitcolor = room.currentState.matchData.teamA.teamA2KitColor;
-  //     }
-  //     if (room.currentState.matchData.teamB?.teamB2KitColor) {
-  //       responseMatchInfo.teamB2kitcolor = room.currentState.matchData.teamB.teamB2KitColor;
-  //     }
-  //     io.to(`room_${accessCode}`).emit('match_info_updated', {
-  //       matchInfo: responseMatchInfo,
-  //       timestamp: timestamp
-  //     });
-  //     console.log("Giá trị trả về match_info_updated là:", responseMatchInfo);
-  //     logger.info(`Match info updated for room ${accessCode}`);
-
-  //   } catch (error) {
-  //     logger.error('Error in match_info_update:', error);
-  //     socket.emit('match_info_error', {
-  //       error: error.message,
-  //       details: 'Failed to update match info'
-  //     });
-  //   }
-  // });
-
   socket.on('match_info_update', async (data) => {
     // console.log("Giá trị match_info_update là:", data);
     try {
@@ -905,6 +812,217 @@ function handleDisplaySettings(io, socket, rooms, userSessions) {
 
     } catch (error) {
       logger.error('Error in toggle_penalty:', error);
+    }
+  });
+
+  // Xử lý cập nhật round
+  socket.on('round_update', async (data) => {
+    console.log('📨 Received round_update:', data);
+
+    try {
+      const { accessCode, round, showRound, timestamp = Date.now() } = data;
+      if (!accessCode) {
+        throw new Error('Access code is required');
+      }
+
+      const behavior = data.behavior || 'add';
+
+      const room = rooms.get(accessCode);
+
+      if (!room) {
+        throw new Error('Room not found');
+      }
+
+      const userData = userSessions.get(socket.id);
+
+      if (!userData || !room.adminClients.has(socket.id)) {
+        throw new Error('Unauthorized: Only admin can update round');
+      }
+
+      if (!room.currentState.round_data) {
+        room.currentState.round_data = {
+          round: '',
+          showRound: true
+        };
+      }
+
+      if (round !== undefined) {
+        room.currentState.round_data.round = round;
+      }
+      if (showRound !== undefined) {
+        room.currentState.round_data.showRound = showRound;
+      }
+
+      room.lastActivity = timestamp;
+
+      if (behavior === 'add') {
+        try {
+          const updateData = {};
+          if (round !== undefined) updateData.round = round;
+          if (showRound !== undefined) updateData.showround = showRound;
+          
+          await updateDisplaySettings(accessCode, 'round', updateData);
+        } catch (error) {
+          console.error('❌ Lỗi khi lưu round vào database:', error.message);
+          throw error;
+        }
+      }
+
+      io.to(`room_${accessCode}`).emit('round_updated', {
+        round: room.currentState.round_data.round,
+        showRound: room.currentState.round_data.showRound,
+        behavior: behavior,
+        timestamp: timestamp
+      });
+
+      console.log('✅ Đã cập nhật và gửi lại dữ liệu round');
+
+    } catch (error) {
+      console.error('❌ Lỗi trong round_update:', error.message);
+      socket.emit('error', {
+        event: 'round_update',
+        message: error.message
+      });
+    }
+  });
+
+  socket.on('group_update', async (data) => {
+    console.log('📨 Received group_update:', data);
+
+    try {
+      const { accessCode, group, showGroup, timestamp = Date.now() } = data;
+      if (!accessCode) {
+        throw new Error('Access code is required');
+      }
+
+      const behavior = data.behavior || 'add';
+
+      const room = rooms.get(accessCode);
+
+      if (!room) {
+        throw new Error('Room not found');
+      }
+
+      const userData = userSessions.get(socket.id);
+
+      if (!userData || !room.adminClients.has(socket.id)) {
+        throw new Error('Unauthorized: Only admin can update group');
+      }
+
+      if (!room.currentState.group_data) {
+        room.currentState.group_data = {
+          group: '',
+          showGroup: true
+        };
+      }
+
+      if (group !== undefined) {
+        room.currentState.group_data.group = group;
+      }
+      if (showGroup !== undefined) {
+        room.currentState.group_data.showGroup = showGroup;
+      }
+
+      room.lastActivity = timestamp;
+
+      if (behavior === 'add') {
+        try {
+          const updateData = {};
+          if (group !== undefined) updateData.group = group;
+          if (showGroup !== undefined) updateData.showgroup = showGroup;
+          
+          await updateDisplaySettings(accessCode, 'group', updateData);
+        } catch (error) {
+          console.error('❌ Lỗi khi lưu group vào database:', error.message);
+          throw error;
+        }
+      }
+
+      io.to(`room_${accessCode}`).emit('group_updated', {
+        group: room.currentState.group_data.group,
+        showGroup: room.currentState.group_data.showGroup,
+        behavior: behavior,
+        timestamp: timestamp
+      });
+
+      console.log('✅ Đã cập nhật và gửi lại dữ liệu group');
+
+    } catch (error) {
+      console.error('❌ Lỗi trong group_update:', error.message);
+      socket.emit('error', {
+        event: 'group_update',
+        message: error.message
+      });
+    }
+  });
+
+  socket.on('subtitle_update', async (data) => {
+    console.log('📨 Received subtitle_update:', data);
+
+    try {
+      const { accessCode, subtitle, showSubtitle, timestamp = Date.now() } = data;
+      if (!accessCode) {
+        throw new Error('Access code is required');
+      }
+
+      const behavior = data.behavior || 'add';
+
+      const room = rooms.get(accessCode);
+
+      if (!room) {
+        throw new Error('Room not found');
+      }
+
+      const userData = userSessions.get(socket.id);
+
+      if (!userData || !room.adminClients.has(socket.id)) {
+        throw new Error('Unauthorized: Only admin can update subtitle');
+      }
+
+      if (!room.currentState.subtitle_data) {
+        room.currentState.subtitle_data = {
+          subtitle: '',
+          showSubtitle: false
+        };
+      }
+
+      if (subtitle !== undefined) {
+        room.currentState.subtitle_data.subtitle = subtitle;
+      }
+      if (showSubtitle !== undefined) {
+        room.currentState.subtitle_data.showSubtitle = showSubtitle;
+      }
+
+      room.lastActivity = timestamp;
+
+      if (behavior === 'add') {
+        try {
+          const updateData = {};
+          if (subtitle !== undefined) updateData.subtitle = subtitle;
+          if (showSubtitle !== undefined) updateData.showsubtitle = showSubtitle;
+          
+          await updateDisplaySettings(accessCode, 'subtitle', updateData);
+        } catch (error) {
+          console.error('❌ Lỗi khi lưu subtitle vào database:', error.message);
+          throw error;
+        }
+      }
+
+      io.to(`room_${accessCode}`).emit('subtitle_updated', {
+        subtitle: room.currentState.subtitle_data.subtitle,
+        showSubtitle: room.currentState.subtitle_data.showSubtitle,
+        behavior: behavior,
+        timestamp: timestamp
+      });
+
+      console.log('✅ Đã cập nhật và gửi lại dữ liệu subtitle');
+
+    } catch (error) {
+      console.error('❌ Lỗi trong subtitle_update:', error.message);
+      socket.emit('error', {
+        event: 'subtitle_update',
+        message: error.message
+      });
     }
   });
 }

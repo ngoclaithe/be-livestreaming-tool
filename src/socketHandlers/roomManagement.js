@@ -556,7 +556,7 @@ function handleRoomManagement(io, socket, rooms, userSessions) {
         if (accessCodeData.status === 'active' || accessCodeData.status === 'used') {
           const room = rooms.get(accessCode);
           const loadedData = await loadRoomData(accessCode);
-          console.log("Giá trị của loadedData là", loadedData);
+          // console.log("Giá trị của loadedData là", loadedData);
 
           const updatedRoom = mergeRoomDataWithState(room, loadedData);
           // console.log("Giá trị của updatedRoom là", updatedRoom);

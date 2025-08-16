@@ -84,16 +84,14 @@ function handleViewUpdates(io, socket, rooms, userSessions) {
       console.log('📢 Nhận yêu cầu cập nhật poster:', data);
       const { accessCode, posterType, timestamp = Date.now() } = data;
       
-      // Validate input
       if (!accessCode || typeof accessCode !== 'string' || accessCode.trim() === '') {
         throw new Error('Mã truy cập không hợp lệ');
       }
       
-      if (!posterType || typeof posterType !== 'string' || !['tretrung', 'haoquang', 'xanhduong', 'vangxanh', 'doden', 'vangkim'].includes(posterType)) {
-        throw new Error('Loại poster không hợp lệ. Các loại hợp lệ: tretrung, haoquang, xanhduong, vangxanh, doden, vangkim');
-      }
+      // if (!posterType || typeof posterType !== 'string' || !['tretrung', 'haoquang', 'xanhduong', 'vangxanh', 'doden', 'vangkim'].includes(posterType)) {
+      //   throw new Error('Loại poster không hợp lệ. Các loại hợp lệ: tretrung, haoquang, xanhduong, vangxanh, doden, vangkim');
+      // }
       
-      // Get room and validate
       const room = rooms.get(accessCode);
       if (!room) {
         logger.error(`Room not found for access code: ${accessCode}`, { socketId: socket.id });
