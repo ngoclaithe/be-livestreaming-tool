@@ -1,7 +1,6 @@
 const { DataTypes } = require('sequelize');
 const { sequelize } = require('../config/database');
 
-// Define Logo model
 const Logo = sequelize.define('Logo', {
   id: {
     type: DataTypes.INTEGER,

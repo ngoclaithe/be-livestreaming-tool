@@ -10,7 +10,6 @@ const { Server } = require('socket.io');
 const path = require('path');
 const swaggerUi = require('swagger-ui-express'); 
 
-// Import configs
 const { connectDB, sequelize } = require('./config/database');
 const { initializeRedis } = require('./config/redis');
 const config = require('./config');

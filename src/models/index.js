@@ -9,6 +9,7 @@ const RoomSession = require('./RoomSession');
 const PaymentAccessCode = require('./PaymentAccessCode');
 const InfoPayment = require('./InfoPayment');
 const Activity = require('./Activity');
+const Poster = require('./Poster');
 
 function setupAssociations() {
   try {
@@ -182,6 +183,20 @@ function setupAssociations() {
       as: 'user'
     });
 
+    // AccessCode has many Posters
+    AccessCode.hasMany(Poster, {
+      foreignKey: 'accessCode',
+      sourceKey: 'code',
+      as: 'posters',
+      onDelete: 'CASCADE',
+      onUpdate: 'CASCADE'
+    });
+
+    Poster.belongsTo(AccessCode, {
+      foreignKey: 'accessCode',
+      targetKey: 'code',
+      as: 'accessCodeData'
+    });
     console.log('Model associations set up successfully');
     return true;
   } catch (error) {
@@ -193,10 +208,10 @@ function setupAssociations() {
 
 async function initModels() {
   try {
-    // console.log('🚀 Initializing database models...');
+    // console.log('Initializing database models...');
 
     await sequelize.authenticate();
-    console.log('✅ Database connection established successfully');
+    console.log('Database connection established successfully');
 
     const associationsSuccess = setupAssociations();
 
@@ -204,7 +219,7 @@ async function initModels() {
       throw new Error('Failed to setup model associations');
     }
 
-    console.log('🔄 Synchronizing database models...');
+    console.log('Synchronizing database models...');
 
     const syncOptions = {
       alter: false,
@@ -222,7 +237,8 @@ async function initModels() {
       { model: RoomSession, name: 'RoomSession' },
       { model: PaymentAccessCode, name: 'PaymentAccessCode' },
       { model: InfoPayment, name: 'InfoPayment' },
-      { model: Activity, name: 'Activity' } 
+      { model: Activity, name: 'Activity' },
+      { model: Poster, name: 'Poster' },
     ];
 
     for (const { model, name } of models) {
@@ -293,6 +309,7 @@ module.exports = {
   InfoPayment,
   PlayerList,
   Activity,
+  Poster,
   initModels,
   setupAssociations,
   closeDatabase

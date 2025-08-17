@@ -1015,10 +1015,10 @@ function handleDisplaySettings(io, socket, rooms, userSessions) {
         timestamp: timestamp
       });
 
-      console.log('✅ Đã cập nhật và gửi lại dữ liệu subtitle');
+      console.log('Đã cập nhật và gửi lại dữ liệu subtitle');
 
     } catch (error) {
-      console.error('❌ Lỗi trong subtitle_update:', error.message);
+      console.error('Lỗi trong subtitle_update:', error.message);
       socket.emit('error', {
         event: 'subtitle_update',
         message: error.message
