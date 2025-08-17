@@ -7,7 +7,7 @@ exports.getActivities = async (req, res) => {
   try {
     const userId = req.user.id;
     const isAdmin = req.user.role === 'admin';
-    const limit = 50; // Giới hạn 50 bản ghi mới nhất
+    const limit = 50; 
 
     if (!Activity) {
       throw new Error('Activity model is undefined');

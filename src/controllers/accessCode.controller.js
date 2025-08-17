@@ -36,7 +36,7 @@ exports.createAccessCode = async (req, res, next) => {
       status: 'upcoming',
       homeScore: 0,
       awayScore: 0,
-      possession: { home: 50, away: 50 },
+      possession: { home: 0, away: 0 },
       shots: { home: 0, away: 0 },
       shotsOnTarget: { home: 0, away: 0 },
       corners: { home: 0, away: 0 },
@@ -46,25 +46,29 @@ exports.createAccessCode = async (req, res, next) => {
       redCards: { home: 0, away: 0 }
     }, { transaction });
 
-    const today = new Date();
-    const startOfToday = startOfDay(today);
-    const endOfToday = endOfDay(today);
-    
-    const activeAccessCodesToday = await AccessCode.count({
-      where: {
-        createdBy: req.user.id,
-        status: 'active',
-        createdAt: {
-          [Op.between]: [startOfToday, endOfToday]
-        }
-      }
-    });
-
     const MAX_ACTIVE_CODES_PER_DAY = 1;
     let newAccessCodeStatus = 'active';
+    let activeAccessCodesToday = 0;
     
-    if (activeAccessCodesToday >= MAX_ACTIVE_CODES_PER_DAY) {
-      newAccessCodeStatus = 'inactive';
+    // Chỉ áp dụng giới hạn cho user không phải admin
+    if (req.user.role !== 'admin') {
+      const today = new Date();
+      const startOfToday = startOfDay(today);
+      const endOfToday = endOfDay(today);
+      
+      activeAccessCodesToday = await AccessCode.count({
+        where: {
+          createdBy: req.user.id,
+          status: 'active',
+          createdAt: {
+            [Op.between]: [startOfToday, endOfToday]
+          }
+        }
+      });
+      
+      if (activeAccessCodesToday >= MAX_ACTIVE_CODES_PER_DAY) {
+        newAccessCodeStatus = 'inactive';
+      }
     }
 
     const accessCode = await AccessCode.create({
@@ -87,21 +91,31 @@ exports.createAccessCode = async (req, res, next) => {
     const response = {
       success: true,
       data: accessCode.toJSON(),
-      message: newAccessCodeStatus === 'inactive' 
-        ? `Access code đã được tạo nhưng ở trạng thái inactive vì bạn đã có ${MAX_ACTIVE_CODES_PER_DAY} access code active trong ngày hôm nay`
-        : 'Access code đã được tạo thành công'
+      message: req.user.role === 'admin' 
+        ? 'Access code đã được tạo thành công (Admin - không giới hạn)'
+        : newAccessCodeStatus === 'inactive' 
+          ? `Access code đã được tạo nhưng ở trạng thái inactive vì bạn đã có ${MAX_ACTIVE_CODES_PER_DAY} access code active trong ngày hôm nay`
+          : 'Access code đã được tạo thành công'
     };
 
     if (match) {
       response.match = match.toJSON();
     }
 
-    // Thêm thông tin về giới hạn vào response
-    response.dailyLimit = {
-      maxActiveCodesPerDay: MAX_ACTIVE_CODES_PER_DAY,
-      currentActiveCount: newAccessCodeStatus === 'active' ? activeAccessCodesToday + 1 : activeAccessCodesToday,
-      remainingSlots: newAccessCodeStatus === 'active' ? MAX_ACTIVE_CODES_PER_DAY - activeAccessCodesToday - 1 : MAX_ACTIVE_CODES_PER_DAY - activeAccessCodesToday
-    };
+    // Thêm thông tin về giới hạn vào response (chỉ cho user không phải admin)
+    if (req.user.role !== 'admin') {
+      response.dailyLimit = {
+        maxActiveCodesPerDay: MAX_ACTIVE_CODES_PER_DAY,
+        currentActiveCount: newAccessCodeStatus === 'active' ? activeAccessCodesToday + 1 : activeAccessCodesToday,
+        remainingSlots: newAccessCodeStatus === 'active' ? MAX_ACTIVE_CODES_PER_DAY - activeAccessCodesToday - 1 : MAX_ACTIVE_CODES_PER_DAY - activeAccessCodesToday
+      };
+    } else {
+      response.dailyLimit = {
+        maxActiveCodesPerDay: 'Unlimited (Admin)',
+        currentActiveCount: 'N/A',
+        remainingSlots: 'Unlimited'
+      };
+    }
 
     res.status(StatusCodes.CREATED).json(response);
   } catch (error) {
@@ -524,7 +538,6 @@ exports.verifyAccessCode = async (req, res, next) => {
       return next(new ApiError('Vui lòng cung cấp mã truy cập', StatusCodes.BAD_REQUEST));
     }
 
-    // Tìm access code
     const accessCode = await AccessCode.findOne({
       where: { code },
       include: [{
@@ -542,7 +555,6 @@ exports.verifyAccessCode = async (req, res, next) => {
       });
     }
 
-    // Kiểm tra các trạng thái KHÔNG được phép truy cập
     const statusMessages = {
       'inactive': 'Mã truy cập chưa được kích hoạt. Vui lòng nạp tiền để sử dụng',
       'expired': 'Mã truy cập đã hết hạn',
@@ -558,9 +570,7 @@ exports.verifyAccessCode = async (req, res, next) => {
       });
     }
 
-    // Kiểm tra thời hạn cho cả 'active' và 'used'
     if (accessCode.expiredAt && new Date(accessCode.expiredAt) < new Date()) {
-      // Cập nhật trạng thái nếu đã hết hạn
       await accessCode.update({ status: 'expired' });
       
       return res.status(StatusCodes.BAD_REQUEST).json({
@@ -571,16 +581,13 @@ exports.verifyAccessCode = async (req, res, next) => {
       });
     }
 
-    // Kiểm tra số lần sử dụng - CHỈ WARNING, không block
     let warningMessage = null;
     if (accessCode.maxUses > 0 && accessCode.usedCount >= accessCode.maxUses) {
       warningMessage = 'Mã truy cập đã đạt giới hạn sử dụng nhưng vẫn có thể truy cập';
     }
 
-    // CHỈ cho phép 'active' và 'used' truy cập
     if (accessCode.status === 'active' || accessCode.status === 'used') {
       
-      // Tính toán thời gian còn lại
       let timeRemaining = null;
       let timeRemainingMessage = null;
       
@@ -611,8 +618,7 @@ exports.verifyAccessCode = async (req, res, next) => {
         }
       }
 
-      // Xác định type_match dựa trên tiền tố của mã code
-      let type_match = 'soccer'; // Mặc định là soccer
+      let type_match = 'soccer'; 
       if (code && code.length > 0) {
         const prefix = code[0].toUpperCase();
         if (prefix === 'P') {
@@ -643,7 +649,6 @@ exports.verifyAccessCode = async (req, res, next) => {
         }
       };
 
-      // Thêm warning message nếu có
       if (warningMessage) {
         responseData.warning = warningMessage;
       }
@@ -651,7 +656,6 @@ exports.verifyAccessCode = async (req, res, next) => {
       return res.status(StatusCodes.OK).json(responseData);
     }
 
-    // Trường hợp status không xác định (không nên xảy ra)
     return res.status(StatusCodes.BAD_REQUEST).json({
       success: false,
       message: `Trạng thái mã truy cập không hợp lệ: ${accessCode.status}`,

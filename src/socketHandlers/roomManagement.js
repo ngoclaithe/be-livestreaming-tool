@@ -36,7 +36,7 @@ function createNewRoom(accessCode) {
         typeMatch: "" 
       },
       matchStats: {
-        possession: { team1: 50, team2: 50 },
+        possession: { team1: 0, team2: 0 },
         totalShots: { team1: 0, team2: 0 },
         shotsOnTarget: { team1: 0, team2: 0 },
         corners: { team1: 0, team2: 0 },
@@ -130,8 +130,8 @@ async function loadRoomData(accessCode) {
         liveText: match.live_unit,
         stats: {
           possession: {
-            team1: match.teamAPossession || 50,
-            team2: match.teamBPossession || 50
+            team1: match.teamAPossession || 0,
+            team2: match.teamBPossession || 0
           },
           totalShots: {
             team1: match.teamAShots || 0,
@@ -209,8 +209,8 @@ function mergeRoomDataWithState(roomState, loadedData) {
     if (match.stats) {
       roomState.currentState.matchStats = {
         possession: {
-          team1: match.stats.possession.team1 || 50,
-          team2: match.stats.possession.team2 || 50
+          team1: match.stats.possession.team1 || 0,
+          team2: match.stats.possession.team2 || 0
         },
         totalShots: {
           team1: match.stats.totalShots.team1 || 0,
