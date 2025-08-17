@@ -92,17 +92,14 @@ async function updateMatchInDatabase(accessCode, updateData) {
 }
 
 function handleMatchData(io, socket, rooms, userSessions) {
-    // Xử lý cập nhật live unit
     socket.on('live_unit_update', async (data) => {
         try {
             const { accessCode, liveUnit } = data;
 
-            // Validate input
             if (!accessCode) {
                 throw new Error('Mã truy cập không hợp lệ');
             }
 
-            // Get room and validate
             const room = rooms.get(accessCode);
             if (!room) {
                 logger.error(`Room not found for access code: ${accessCode}`, { socketId: socket.id });
@@ -113,7 +110,6 @@ function handleMatchData(io, socket, rooms, userSessions) {
                 });
             }
 
-            // Verify admin permission
             const userData = userSessions.get(socket.id);
             if (!userData || !room.adminClients.has(socket.id)) {
                 return socket.emit('live_unit_update_error', {
@@ -123,16 +119,13 @@ function handleMatchData(io, socket, rooms, userSessions) {
                 });
             }
 
-            // Update in database
             const result = await updateMatchInDatabase(accessCode, { live_unit: liveUnit.text });
             if (!result.success) {
                 throw new Error(result.error || 'Không thể cập nhật live unit');
             }
 
-            // Update room state
             room.currentState.matchData.liveText = liveUnit.text || null;
 
-            // Broadcast to all clients in the room
             io.to(`room_${accessCode}`).emit('live_unit_updated', {
                 liveText: room.currentState.matchData.liveText,
                 timestamp: Date.now()
@@ -159,12 +152,10 @@ function handleMatchData(io, socket, rooms, userSessions) {
         try {
             const { accessCode, matchTitle, timestamp = Date.now() } = data;
 
-            // Validate input
             if (!accessCode) {
                 throw new Error('Mã truy cập không hợp lệ');
             }
 
-            // Get room and validate
             const room = rooms.get(accessCode);
             if (!room) {
                 logger.error(`Room not found for access code: ${accessCode}`, { socketId: socket.id });
@@ -175,7 +166,6 @@ function handleMatchData(io, socket, rooms, userSessions) {
                 });
             }
 
-            // Verify admin permission
             const userData = userSessions.get(socket.id);
             if (!userData || !room.adminClients.has(socket.id)) {
                 return socket.emit('match_update_error', {
@@ -185,16 +175,13 @@ function handleMatchData(io, socket, rooms, userSessions) {
                 });
             }
 
-            // Prepare update data
             const updateData = {};
 
-            // Process title if provided
             if (matchTitle !== undefined) {
                 room.currentState.matchData.matchTitle = matchTitle;
                 updateData.match_title = matchTitle;
             }
 
-            // Update in database if there are changes
             if (Object.keys(updateData).length > 0) {
                 const result = await updateMatchInDatabase(accessCode, updateData);
                 if (!result.success) {
@@ -227,12 +214,10 @@ function handleMatchData(io, socket, rooms, userSessions) {
             console.log('DEBUG - score_update data received:', JSON.stringify(data, null, 2));
             const { accessCode, scores, timestamp = Date.now() } = data;
 
-            // Validate input
             if (!accessCode || !scores || typeof scores !== 'object') {
                 throw new Error('Mã truy cập và tỉ số không hợp lệ');
             }
 
-            // Get room and validate
             const room = rooms.get(accessCode);
             if (!room) {
                 logger.error(`Room not found for access code: ${accessCode}`, { socketId: socket.id });
@@ -243,7 +228,6 @@ function handleMatchData(io, socket, rooms, userSessions) {
                 });
             }
 
-            // Verify admin permission
             const userData = userSessions.get(socket.id);
             if (!userData || !room.adminClients.has(socket.id)) {
                 return socket.emit('score_error', {
@@ -253,10 +237,8 @@ function handleMatchData(io, socket, rooms, userSessions) {
                 });
             }
 
-            // Log để kiểm tra cấu trúc dữ liệu hiện tại
             console.log('Current matchData structure:', JSON.stringify(room.currentState.matchData, null, 2));
 
-            // Update scores with new teamA/teamB structure
             const updateData = {};
 
             if (scores.teamA !== undefined) {
@@ -270,19 +252,16 @@ function handleMatchData(io, socket, rooms, userSessions) {
                 updateData.awayScore = room.currentState.matchData.teamB.score;
             }
 
-            // Update scores and team info in database
             if (Object.keys(updateData).length > 0) {
                 updateMatchInDatabase(accessCode, updateData);
             }
 
-            // Log để kiểm tra sau khi cập nhật
             console.log('Updated scores:', {
                 teamA: room.currentState.matchData.teamA?.score,
                 teamB: room.currentState.matchData.teamB?.score
             });
             room.lastActivity = timestamp;
 
-            // Broadcast to all clients in the room
             io.to(`room_${accessCode}`).emit('score_updated', {
                 scores: {
                     home: room.currentState.matchData.teamA?.score || 0,
@@ -291,7 +270,6 @@ function handleMatchData(io, socket, rooms, userSessions) {
                 timestamp: timestamp
             });
 
-            // Update scores in database if matchId exists
             if (Object.keys(updateData).length > 0 && room.matchId) {
                 updateMatchInDatabase(room.matchId, updateData);
             }
@@ -312,18 +290,15 @@ function handleMatchData(io, socket, rooms, userSessions) {
             console.log('DEBUG - futsal_errors_update data received:', JSON.stringify(data, null, 2));
             const { accessCode, futsalErrors, timestamp = Date.now() } = data;
 
-            // Validate input
             if (!accessCode || !futsalErrors) {
                 throw new Error('Mã truy cập và lỗi không hợp lệ');
             }
 
-            // Get room and validate
             const room = rooms.get(accessCode);
             if (!room) {
                 console.log(`Room not found for access code: ${accessCode}`, { socketId: socket.id });
             }
 
-            // Verify admin permission
             const userData = userSessions.get(socket.id);
             if (!userData || !room.adminClients.has(socket.id)) {
                 console.log(`Không quyền`);
@@ -342,19 +317,16 @@ function handleMatchData(io, socket, rooms, userSessions) {
                 updateData.teamBFutsalFoul = room.currentState.matchData.teamB.teamBFutsalFoul;
             }
 
-            // Update scores and team info in database
             if (Object.keys(updateData).length > 0) {
                 updateMatchInDatabase(accessCode, updateData);
             }
 
-            // Log để kiểm tra sau khi cập nhật
             console.log('Updated lỗi:', {
                 teamA: room.currentState.matchData.teamA?.teamAFutsalFoul,
                 teamB: room.currentState.matchData.teamB?.teamBFutsalFoul
             });
             room.lastActivity = timestamp;
 
-            // Broadcast to all clients in the room
             io.to(`room_${accessCode}`).emit('futsal_errors_updated', {
                 futsalErrors: {
                     teamA: room.currentState.matchData.teamA?.teamAFutsalFoul || 0,
@@ -363,7 +335,6 @@ function handleMatchData(io, socket, rooms, userSessions) {
                 timestamp: timestamp
             });
 
-            // Update scores in database if matchId exists
             if (Object.keys(updateData).length > 0 && room.matchId) {
                 updateMatchInDatabase(room.matchId, updateData);
             }
@@ -473,17 +444,15 @@ function handleMatchData(io, socket, rooms, userSessions) {
             });
         }
     });
-    // Team names update
+
     socket.on('team_names_update', (data) => {
         try {
             const { accessCode, names, timestamp = Date.now() } = data;
 
-            // Validate input
             if (!accessCode || !names || typeof names !== 'object') {
                 throw new Error('Mã truy cập và tên đội không hợp lệ');
             }
 
-            // Get room and validate
             const room = rooms.get(accessCode);
             if (!room) {
                 logger.error(`Room not found for access code: ${accessCode}`, { socketId: socket.id });
@@ -494,7 +463,6 @@ function handleMatchData(io, socket, rooms, userSessions) {
                 });
             }
 
-            // Verify admin permission
             const userData = userSessions.get(socket.id);
             if (!userData || !room.adminClients.has(socket.id)) {
                 return socket.emit('team_names_error', {
@@ -504,7 +472,6 @@ function handleMatchData(io, socket, rooms, userSessions) {
                 });
             }
 
-            // Update team names with new structure and prepare for database update
             const updateData = {};
 
             if (names.teamA) {
@@ -518,13 +485,11 @@ function handleMatchData(io, socket, rooms, userSessions) {
                 updateData.teamBName = String(names.teamB);
             }
 
-            // Update team names in database
             if (Object.keys(updateData).length > 0) {
                 updateMatchInDatabase(accessCode, updateData);
             }
             room.lastActivity = timestamp;
 
-            // Broadcast to all clients in the room
             io.to(`room_${accessCode}`).emit('team_names_updated', {
                 names: {
                     home: room.currentState.matchData.teamA.name,
@@ -544,13 +509,11 @@ function handleMatchData(io, socket, rooms, userSessions) {
         }
     });
 
-    // Team logos update
     socket.on('team_logos_update', (data) => {
         console.log("Giá trị Team logos update", data);
         try {
             const { accessCode, logos, timestamp = Date.now() } = data;
 
-            // Validate input
             if (!accessCode || typeof accessCode !== 'string' || accessCode.trim() === '') {
                 throw new Error('Mã truy cập không hợp lệ');
             }
@@ -559,7 +522,6 @@ function handleMatchData(io, socket, rooms, userSessions) {
                 throw new Error('Dữ liệu logo không hợp lệ');
             }
 
-            // Get room and validate
             const room = rooms.get(accessCode);
             if (!room) {
                 logger.error(`Room not found for access code: ${accessCode}`, { socketId: socket.id });
@@ -570,7 +532,6 @@ function handleMatchData(io, socket, rooms, userSessions) {
                 });
             }
 
-            // Verify admin permission
             const userData = userSessions.get(socket.id);
             if (!userData || !room.adminClients.has(socket.id)) {
                 return socket.emit('team_logos_error', {
@@ -580,7 +541,6 @@ function handleMatchData(io, socket, rooms, userSessions) {
                 });
             }
 
-            // Update team logos with new teamA/teamB structure and prepare for database update
             const updateData = {};
 
             if (logos.teamA) {
@@ -594,7 +554,6 @@ function handleMatchData(io, socket, rooms, userSessions) {
                 updateData.teamBLogo = String(logos.teamB);
             }
 
-            // Update team logos in database
             if (Object.keys(updateData).length > 0) {
                 updateMatchInDatabase(accessCode, updateData);
                 console.log("Giá trị của updateData", updateData);
@@ -602,7 +561,6 @@ function handleMatchData(io, socket, rooms, userSessions) {
 
             room.lastActivity = timestamp;
 
-            // Broadcast to all clients in the room
             io.to(`room_${accessCode}`).emit('team_logos_updated', {
                 logos: {
                     home: room.currentState.matchData.teamA.logo,
@@ -653,7 +611,6 @@ function handleMatchData(io, socket, rooms, userSessions) {
             }
             room.lastActivity = timestamp;
 
-            // Broadcast to all clients in the room
             io.to(`room_${accessCode}`).emit('match_time_updated', {
                 time: {
                     matchTime: room.currentState.matchData.matchTime,
@@ -674,7 +631,6 @@ function handleMatchData(io, socket, rooms, userSessions) {
         }
     });
 
-    // Match stats update
     socket.on('match_stats_update', async (data) => {
         try {
             const { accessCode, stats, timestamp = Date.now() } = data;
@@ -726,6 +682,14 @@ function handleMatchData(io, socket, rooms, userSessions) {
                 fouls: {
                     team1: 'teamAFouls',
                     team2: 'teamBFouls'
+                },
+                yellowCards: {
+                    team1: 'teamAYellowCards',
+                    team2: 'teamBYellowCards'
+                },
+                redCards: {
+                    team1: 'teamARedCards',
+                    team2: 'teamBRedCards'
                 }
             };
 
@@ -736,12 +700,32 @@ function handleMatchData(io, socket, rooms, userSessions) {
                     Object.entries(statValue).forEach(([teamKey, value]) => {
                         const dbField = statToDbField[statKey][teamKey];
                         if (dbField) {
-                            const intValue = parseInt(value) || 0;
+                            if (statKey === 'possession') {
+                                const currentValue = room.currentState.matchStats[statKey]?.[teamKey] || 0;
+                                const addValue = parseInt(value) || 0;
+                                const newValue = currentValue + addValue;
 
-                            updateData[dbField] = intValue;
+                                updateData[dbField] = newValue;
 
-                            if (room.currentState.matchStats[statKey]) {
-                                room.currentState.matchStats[statKey][teamKey] = intValue;
+                                if (!room.currentState.matchStats[statKey]) {
+                                    room.currentState.matchStats[statKey] = {};
+                                }
+                                room.currentState.matchStats[statKey][teamKey] = newValue;
+
+                            } else if (statKey === 'yellowCards' || statKey === 'redCards') {
+                                const arrayValue = Array.isArray(value) ? value : [];
+                                updateData[dbField] = arrayValue;
+
+                                if (room.currentState.matchStats[statKey]) {
+                                    room.currentState.matchStats[statKey][teamKey] = arrayValue;
+                                }
+                            } else {
+                                const intValue = parseInt(value) || 0;
+                                updateData[dbField] = intValue;
+
+                                if (room.currentState.matchStats[statKey]) {
+                                    room.currentState.matchStats[statKey][teamKey] = intValue;
+                                }
                             }
                         }
                     });
@@ -768,7 +752,7 @@ function handleMatchData(io, socket, rooms, userSessions) {
             room.lastActivity = timestamp;
 
             io.to(`room_${accessCode}`).emit('match_stats_updated', {
-                stats: stats,
+                stats: room.currentState.matchStats,
                 timestamp: timestamp
             });
 
@@ -1050,7 +1034,6 @@ function handleMatchData(io, socket, rooms, userSessions) {
         }
     });
 
-    // Cập nhật phần match_stats_update để xử lý yellowCards và redCards như mảng
     socket.on('match_stats_update', async (data) => {
         try {
             const { accessCode, stats, timestamp = Date.now() } = data;
