@@ -6,7 +6,7 @@ const crypto = require('crypto');
 const logger = require('../utils/logger');
 const config = require('../config');
 const jwt = require('jsonwebtoken');
-const { Op } = require('sequelize'); // Import Op từ sequelize
+const { Op } = require('sequelize'); 
 
 // @desc    Register user
 // @route   POST /api/v1/auth/register
@@ -30,7 +30,7 @@ exports.register = async (req, res, next) => {
       success: true,
       token,
       user: {
-        id: user.id, // Sử dụng user.id thay vì user._id
+        id: user.id, 
         name: user.name,
         email: user.email,
         role: user.role,
@@ -50,18 +50,15 @@ exports.login = async (req, res, next) => {
   try {
     const { email, password } = req.body;
 
-    // Validate email & password
     if (!email || !password) {
       return next(
         new ApiError('Vui lòng nhập email và mật khẩu', StatusCodes.BAD_REQUEST)
       );
     }
 
-    // Check for user with Sequelize syntax
     const user = await User.findOne({
       where: { email },
-      attributes: { include: ['password'] }  // Explicitly include password field
-    });
+      attributes: { include: ['password'] }     });
 
     if (!user) {
       return next(
@@ -69,7 +66,6 @@ exports.login = async (req, res, next) => {
       );
     }
 
-    // Check if password matches
     const isMatch = await user.matchPassword(password);
 
     if (!isMatch) {
@@ -78,7 +74,6 @@ exports.login = async (req, res, next) => {
       );
     }
 
-    // Check if user is active
     if (!user.is_active) {
       return next(
         new ApiError('Tài khoản của bạn đã bị khóa', StatusCodes.FORBIDDEN)
@@ -92,7 +87,7 @@ exports.login = async (req, res, next) => {
       success: true,
       token,
       user: {
-        id: user.id, // Sử dụng user.id thay vì user._id
+        id: user.id, 
         name: user.name,
         email: user.email,
         role: user.role,
