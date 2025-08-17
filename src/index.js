@@ -20,25 +20,10 @@ const app = express();
 const httpServer = createServer(app);
 
 app.use(cors({
-  origin: function (origin, callback) {
-    if (!origin) return callback(null, true);
-    
-    return callback(null, true);
-  },
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
-  allowedHeaders: [
-    'Content-Type', 
-    'Authorization', 
-    'X-Requested-With', 
-    'Accept', 
-    'Origin',
-    'Content-Length',
-    'Content-Disposition',
-    'X-File-Name',
-    'X-File-Size',
-    'X-File-Type'
-  ],
-  credentials: true,
+  origin: '*', 
+  methods: '*', 
+  allowedHeaders: '*', 
+  credentials: false, 
   optionsSuccessStatus: 200,
   preflightContinue: false
 }));
