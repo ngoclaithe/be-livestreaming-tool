@@ -191,7 +191,7 @@ app.get('/health', (req, res) => {
   });
 });
 
-let authRoutes, userRoutes, logoRoutes, accessCodeRoutes, displaySettingRoutes, roomSessionRoutes, paymentAccessCodeRoutes, infoPaymentRoutes, activitiesRoutes, statisticsRoutes, socketRoutes;
+let authRoutes, userRoutes, logoRoutes, accessCodeRoutes, displaySettingRoutes, roomSessionRoutes, paymentAccessCodeRoutes, infoPaymentRoutes, activitiesRoutes, statisticsRoutes, socketRoutes, posterRoutes;
 
 try {
   authRoutes = require('./routes/auth.routes');
@@ -206,6 +206,7 @@ try {
   statisticsRoutes = require('./routes/statistics.routes');
   playerListRoutes = require('./routes/playerList.routes');
   socketRoutes = require('./routes/socket.routes');
+  posterRoutes = require('./routes/poster.routes');
 } catch (error) {
   logger.error('Error importing routes:', error);
   process.exit(1);
@@ -228,6 +229,7 @@ app.use('/api/v1/statistics', statisticsRoutes);
 app.use('/api/v1/activities', activitiesRoutes);
 app.use('/api/v1/player-lists', playerListRoutes);
 app.use('/api/v1/sockets', socketRoutes);
+app.use('/api/v1/posters', posterRoutes);
 
 app.get('/', (req, res) => {
   res.status(200).json({
