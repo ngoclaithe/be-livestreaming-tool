@@ -53,10 +53,6 @@ const io = new Server(httpServer, {
   }
 });
 
-const WebSocketService = require('./services/websocket.service');
-const webSocketService = new WebSocketService(io);
-webSocketService.initialize();
-
 // Middleware để xử lý CORS cho tất cả requests
 app.use((req, res, next) => {
   res.header('Access-Control-Allow-Origin', req.headers.origin || '*');
@@ -131,6 +127,10 @@ if (config.nodeEnv === 'development') {
   }));
 }
 
+const WebSocketService = require('./services/websocket.service');
+const webSocketService = new WebSocketService(io);
+webSocketService.initialize();
+
 app.use(express.static(path.join(__dirname, 'public'), {
   maxAge: config.nodeEnv === 'production' ? '1d' : '0',
   etag: true,
@@ -173,6 +173,7 @@ io.engine.on('connection_error', (err) => {
 app.use((req, res, next) => {
   try {
     req.io = io;
+    req.app.set('webSocketService', webSocketService);
     next();
   } catch (error) {
     logger.error('Error setting up socket.io in middleware:', error);
