@@ -19,21 +19,35 @@ const { errorHandler, notFound } = require('./middleware/error.middleware');
 const app = express();
 const httpServer = createServer(app);
 
+app.use((req, res, next) => {
+  res.header('Access-Control-Allow-Origin', '*');
+  res.header('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS,PATCH');
+  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, Content-Length, X-Requested-With, Accept, Origin, X-CSRF-Token');
+  res.header('Access-Control-Allow-Credentials', 'false');
+  
+  if (req.method === 'OPTIONS') {
+    res.status(200).end();
+    return;
+  }
+  
+  next();
+});
+
 app.use(cors({
-  origin: '*', 
-  methods: '*', 
-  allowedHeaders: '*', 
-  credentials: false, 
+  origin: '*',
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin', 'X-CSRF-Token'],
+  credentials: false,
   optionsSuccessStatus: 200,
   preflightContinue: false
 }));
 
 const io = new Server(httpServer, {
   cors: {
-    origin: true, 
+    origin: '*',
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
     allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin'],
-    credentials: true
+    credentials: false
   },
   path: '/socket.io',
   transports: ['websocket', 'polling'],
@@ -150,7 +164,6 @@ if (config.fileUpload && config.fileUpload.uploadDir) {
   }
 }
 
-    
 io.engine.on('connection_error', (err) => {
   logger.error('Socket.IO connection error:', err);
 });
@@ -325,7 +338,6 @@ process.on('uncaughtException', (err) => {
   process.exit(1);
 });
 
-// Start the application
 startServer().catch(error => {
   logger.error('Failed to start application:', error);
   process.exit(1);
