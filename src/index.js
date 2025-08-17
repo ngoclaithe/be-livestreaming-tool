@@ -226,6 +226,7 @@ app.use('/api/v1/info-payments', infoPaymentRoutes);
 app.use('/api/v1/statistics', statisticsRoutes);
 app.use('/api/v1/activities', activitiesRoutes);
 app.use('/api/v1/player-lists', playerListRoutes);
+app.use('/api/v1/sockets', socketRoutes);
 
 app.get('/', (req, res) => {
   res.status(200).json({
