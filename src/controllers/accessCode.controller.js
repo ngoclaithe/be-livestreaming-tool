@@ -23,7 +23,6 @@ exports.createAccessCode = async (req, res, next) => {
       throw new ApiError(StatusCodes.BAD_REQUEST, 'typeMatch is required');
     }
 
-    // Tạo mới match với các giá trị mặc định
     const match = await Match.create({
       teamAName: 'Team A',
       teamBName: 'Team B',
@@ -47,7 +46,6 @@ exports.createAccessCode = async (req, res, next) => {
       redCards: { home: 0, away: 0 }
     }, { transaction });
 
-    // Tìm tất cả access code active của user trong ngày hiện tại
     const today = new Date();
     const startOfToday = startOfDay(today);
     const endOfToday = endOfDay(today);
@@ -62,15 +60,13 @@ exports.createAccessCode = async (req, res, next) => {
       }
     });
 
-    // Kiểm tra giới hạn (tối đa 3 access code active trong 1 ngày)
-    const MAX_ACTIVE_CODES_PER_DAY = 3;
+    const MAX_ACTIVE_CODES_PER_DAY = 1;
     let newAccessCodeStatus = 'active';
     
     if (activeAccessCodesToday >= MAX_ACTIVE_CODES_PER_DAY) {
       newAccessCodeStatus = 'inactive';
     }
 
-    // Tạo mới access code với status được xác định
     const accessCode = await AccessCode.create({
       code: AccessCode.generateCode(typeMatch),
       status: newAccessCodeStatus,
@@ -82,7 +78,6 @@ exports.createAccessCode = async (req, res, next) => {
       expiredAt: expiredAt ? new Date(expiredAt) : null
     }, { transaction });
 
-    // Nếu không có expiredAt, đặt mặc định 30 ngày
     if (!expiredAt) {
       await accessCode.setExpiry(30, transaction);
     }
