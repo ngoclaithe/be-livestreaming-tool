@@ -19,14 +19,7 @@ const { errorHandler, notFound } = require('./middleware/error.middleware');
 const app = express();
 const httpServer = createServer(app);
 
-app.use(cors({
-  origin: true, 
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin'],
-  credentials: true,
-  optionsSuccessStatus: 200,
-  preflightContinue: false
-}));
+app.use(cors(config.cors));
 
 const io = new Server(httpServer, {
   cors: {
@@ -51,21 +44,6 @@ const io = new Server(httpServer, {
       chunkSize: 16 * 1024,
     },
   }
-});
-
-// Middleware để xử lý CORS cho tất cả requests
-app.use((req, res, next) => {
-  res.header('Access-Control-Allow-Origin', req.headers.origin || '*');
-  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS, PATCH');
-  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
-  res.header('Access-Control-Allow-Credentials', 'true');
-  res.header('Access-Control-Max-Age', '86400'); 
-  
-  if (req.method === 'OPTIONS') {
-    return res.status(200).end();
-  }
-  
-  next();
 });
 
 try {
@@ -136,7 +114,6 @@ app.use(express.static(path.join(__dirname, 'public'), {
   etag: true,
   lastModified: true,
   setHeaders: (res, path) => {
-    res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
   }
 }));
@@ -148,21 +125,22 @@ if (config.fileUpload && config.fileUpload.uploadDir) {
     fs.mkdirSync(uploadDir, { recursive: true });
   }
   
-  app.use('/api/v1/uploads', (req, res, next) => {
-    res.header('Access-Control-Allow-Origin', '*');
-    res.header('Access-Control-Allow-Methods', 'GET, OPTIONS');
-    res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-    res.header('Cross-Origin-Resource-Policy', 'cross-origin');
-    next();
-  }, express.static(uploadDir, {
-    maxAge: config.nodeEnv === 'production' ? '7d' : '0',
-    etag: true,
-    lastModified: true,
-    setHeaders: (res, path) => {
-      res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
-      res.setHeader('Access-Control-Allow-Origin', '*');
+  if (config.fileUpload && config.fileUpload.uploadDir) {
+    const uploadDir = path.join(process.cwd(), config.fileUpload.uploadDir);
+    
+    if (!fs.existsSync(uploadDir)) {
+      fs.mkdirSync(uploadDir, { recursive: true });
     }
-  }));
+    
+    app.use('/api/v1/uploads', express.static(uploadDir, {
+      maxAge: config.nodeEnv === 'production' ? '7d' : '0',
+      etag: true,
+      lastModified: true,
+      setHeaders: (res, path) => {
+        res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+      }
+    }));
+  }
 }
 
     
