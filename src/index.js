@@ -19,40 +19,44 @@ const { errorHandler, notFound } = require('./middleware/error.middleware');
 const app = express();
 const httpServer = createServer(app);
 
-const allowedOrigins = [
-  "http://localhost:3000",
-  "https://scoliv2.vercel.app"
-];
+const allowedOrigins = (process.env.CORS_ORIGINS || 'http://localhost:3000,https://scoliv2.vercel.app')
+  .split(',')
+  .map(s => s.trim())
+  .filter(Boolean);
+
+app.use((req, res, next) => {
+  res.header('Vary', 'Origin');
+  next();
+});
 
 app.use(cors({
-  origin: function (origin, callback) {
-    if (!origin || allowedOrigins.includes(origin)) {
-      callback(null, origin);
-    } else {
-      callback(new Error("Not allowed by CORS"));
-    }
+  origin: (origin, callback) => {
+    if (!origin) return callback(null, true);
+    if (allowedOrigins.includes(origin)) return callback(null, true);
+    return callback(new Error('Not allowed by CORS'));
   },
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin', 'X-CSRF-Token'],
   credentials: true,
-  optionsSuccessStatus: 200
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
+  optionsSuccessStatus: 204
 }));
 
-app.options('*', (req, res) => {
-  res.header('Access-Control-Allow-Origin', req.headers.origin || '');
-  res.header('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS,PATCH');
-  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, Content-Length, X-Requested-With, Accept, Origin, X-CSRF-Token');
-  res.header('Access-Control-Allow-Credentials', 'true');
-  res.sendStatus(200);
-});
+app.options('*', cors({
+  origin: (origin, callback) => {
+    if (!origin) return callback(null, true);
+    if (allowedOrigins.includes(origin)) return callback(null, true);
+    return callback(new Error('Not allowed by CORS'));
+  },
+  credentials: true
+}));
 
 const io = new Server(httpServer, {
   cors: {
-    origin: function (origin, callback) {
-      callback(null, true);
+    origin: (origin, callback) => {
+      if (!origin) return callback(null, true);
+      if (allowedOrigins.includes(origin)) return callback(null, true);
+      return callback(new Error('Socket.IO not allowed by CORS'));
     },
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin'],
     credentials: true
   },
   path: '/socket.io',
@@ -64,12 +68,8 @@ const io = new Server(httpServer, {
   allowUpgrades: true,
   perMessageDeflate: {
     threshold: 1024,
-    zlibDeflateOptions: {
-      chunkSize: 16 * 1024,
-    },
-    zlibInflateOptions: {
-      chunkSize: 16 * 1024,
-    },
+    zlibDeflateOptions: { chunkSize: 16 * 1024 },
+    zlibInflateOptions: { chunkSize: 16 * 1024 },
   }
 });
 
@@ -276,11 +276,7 @@ const startServer = async () => {
     }
 
     const server = httpServer.listen(config.port, config.host, () => {
-      logger.info(`✅ Server running in ${config.nodeEnv} mode on ${config.host}:${config.port}`);
       logger.info(`📖 API Documentation: http://${config.host}:${config.port}/api-docs`);
-      logger.info(`🏥 Health Check: http://${config.host}:${config.port}/health`);
-      logger.info(`🌐 CORS: Allowing all origins`);
-      logger.info(`🔌 WebSocket: Allowing all origins`);
     });
 
     const gracefulShutdown = (signal) => {
