@@ -42,6 +42,7 @@ exports.uploadPoster = async (req, res, next) => {
       file_name: req.file.filename,
       file_size: req.file.size,
       file_type: req.file.mimetype,
+      url_poster: `/uploads/${req.file.filename}`,  
     }, { transaction: t });
 
     await t.commit();
@@ -145,7 +146,6 @@ exports.updatePoster = async (req, res, next) => {
     const updateData = {};
     if (name) updateData.name = name;
     if (description !== undefined) updateData.description = description;
-    if (accessCode) updateData.accessCode = accessCode.trim();
 
     // Handle file upload if a new file is provided
     if (req.file) {
@@ -159,6 +159,7 @@ exports.updatePoster = async (req, res, next) => {
       updateData.file_name = req.file.filename;
       updateData.file_size = req.file.size;
       updateData.file_type = req.file.mimetype;
+      updateData.url_poster = `/uploads/${req.file.filename}`;  
     }
 
     await poster.update(updateData, { transaction: t });
@@ -174,6 +175,39 @@ exports.updatePoster = async (req, res, next) => {
       console.error('  [Poster Controller] Error updating poster:', error);
       next(new ApiError('Đã xảy ra lỗi khi cập nhật poster', StatusCodes.INTERNAL_SERVER_ERROR));
     }
+  }
+};
+
+/**
+ * @desc    Get all posters by access code
+ * @route   GET /api/v1/posters/access-code/:accessCode
+ * @access  Public
+ */
+exports.getPostersByAccessCode = async (req, res, next) => {
+  try {
+    const { accessCode } = req.params;
+    const { name, sortBy = 'createdAt', sortOrder = 'DESC' } = req.query;
+    
+    const whereClause = { accessCode };
+    if (name) {
+      whereClause.name = { [Op.like]: `%${name}%` };
+    }
+
+    const order = [[sortBy, sortOrder.toUpperCase()]];
+    
+    const posters = await Poster.findAll({
+      where: whereClause,
+      order,
+    });
+
+    res.status(StatusCodes.OK).json({
+      success: true,
+      count: posters.length,
+      data: posters
+    });
+  } catch (error) {
+    console.error('  [Poster Controller] Error getting posters by access code:', error);
+    next(new ApiError('Đã xảy ra lỗi khi lấy danh sách poster', StatusCodes.INTERNAL_SERVER_ERROR));
   }
 };
 

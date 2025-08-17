@@ -123,6 +123,68 @@ router.get('/', posterController.getPosters);
 
 /**
  * @swagger
+ * /api/v1/posters/access-code/{accessCode}:
+ *   get:
+ *     summary: Lấy danh sách poster theo mã truy cập
+ *     tags: [Posters]
+ *     parameters:
+ *       - in: path
+ *         name: accessCode
+ *         schema:
+ *           type: string
+ *         required: true
+ *         description: Mã truy cập của phòng
+ *       - in: query
+ *         name: name
+ *         schema:
+ *           type: string
+ *         description: Từ khóa tìm kiếm tên poster
+ *       - in: query
+ *         name: sortBy
+ *         schema:
+ *           type: string
+ *           default: createdAt
+ *         description: Trường để sắp xếp
+ *       - in: query
+ *         name: sortOrder
+ *         schema:
+ *           type: string
+ *           enum: [ASC, DESC]
+ *           default: DESC
+ *         description: Thứ tự sắp xếp (ASC tăng dần, DESC giảm dần)
+ *     responses:
+ *       200:
+ *         description: Danh sách poster
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 count:
+ *                   type: integer
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     $ref: '#/components/schemas/Poster'
+ *       400:
+ *         description: Thiếu thông tin bắt buộc
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ *       500:
+ *         description: Lỗi server
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ */
+router.get('/access-code/:accessCode', posterController.getPostersByAccessCode);
+
+/**
+ * @swagger
  * /api/v1/posters/{id}:
  *   get:
  *     summary: Lấy thông tin chi tiết poster
@@ -130,19 +192,29 @@ router.get('/', posterController.getPosters);
  *     parameters:
  *       - in: path
  *         name: id
- *         required: true
  *         schema:
  *           type: integer
+ *         required: true
  *         description: ID của poster
  *     responses:
  *       200:
- *         description: Thông tin chi tiết poster
+ *         description: Thông tin poster
  *         content:
  *           application/json:
  *             schema:
  *               $ref: '#/components/schemas/Poster'
  *       404:
  *         description: Không tìm thấy poster
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ *       500:
+ *         description: Lỗi server
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
  */
 router.get('/:id', posterController.getPoster);
 
