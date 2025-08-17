@@ -19,7 +19,18 @@ const { errorHandler, notFound } = require('./middleware/error.middleware');
 const app = express();
 const httpServer = createServer(app);
 
-app.use(cors(config.cors));
+app.use(cors({
+  origin: function (origin, callback) {
+    if (!origin) return callback(null, true);
+    
+    return callback(null, true);
+  },
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin'],
+  credentials: true,
+  optionsSuccessStatus: 200,
+  preflightContinue: false
+}));
 
 const io = new Server(httpServer, {
   cors: {
