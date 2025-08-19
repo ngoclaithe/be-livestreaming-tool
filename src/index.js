@@ -19,7 +19,7 @@ const { errorHandler, notFound } = require('./middleware/error.middleware');
 const app = express();
 const httpServer = createServer(app);
 
-const allowedOrigins = (process.env.CORS_ORIGINS || 'http://localhost:3000,https://scoliv2.vercel.app,https://scoliv2.com','https://e4276d01feae478596652fa23d2947a6-zenith-den.projects.builder.my')
+const allowedOrigins = (process.env.CORS_ORIGINS || 'http://localhost:3000,https://scoliv2.vercel.app,https://scoliv2.com,https://e4276d01feae478596652fa23d2947a6-zenith-den.projects.builder.my')
   .split(',')
   .map(s => s.trim())
   .filter(Boolean);
