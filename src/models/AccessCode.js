@@ -108,10 +108,8 @@ const AccessCode = sequelize.define('AccessCode', {
   ],
 });
 
-// Generate access code based on match type
 AccessCode.generateCode = function(typeMatch = 'soccer') {
-  // Define prefix based on match type
-  let prefix = 'B'; // Default prefix for soccer
+  let prefix = 'B'; 
   
   switch(typeMatch.toLowerCase()) {
     case 'pickleball':
@@ -120,10 +118,8 @@ AccessCode.generateCode = function(typeMatch = 'soccer') {
     case 'futsal':
       prefix = 'F';
       break;
-    // Add more cases if needed
   }
   
-  // Generate 5 random alphanumeric characters (uppercase letters and digits)
   const characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
   let randomPart = '';
   
@@ -134,17 +130,14 @@ AccessCode.generateCode = function(typeMatch = 'soccer') {
   return prefix + randomPart;
 };
 
-// Check if access code is expired
 AccessCode.prototype.isExpired = function() {
   return this.expiredAt && new Date() > new Date(this.expiredAt);
 };
 
-// Check if access code is active
 AccessCode.prototype.isActive = function() {
   return this.status === 'active' && !this.isExpired();
 };
 
-// Mark code as used
 AccessCode.prototype.markAsUsed = async function(userId) {
   this.status = 'used';
   this.lastUsedAt = new Date();
@@ -157,7 +150,6 @@ AccessCode.prototype.markAsUsed = async function(userId) {
   return this.save();
 };
 
-// Revoke access code
 AccessCode.prototype.revoke = async function(userId) {
   this.status = 'revoked';
   this.revokedAt = new Date();

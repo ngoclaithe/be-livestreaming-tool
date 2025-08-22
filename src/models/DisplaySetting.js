@@ -32,11 +32,6 @@ const DisplaySetting = sequelize.define('DisplaySetting', {
     allowNull: true,
     comment: 'Đường dẫn đến file logo',
   },
-  currentView: {
-    type: DataTypes.STRING(50),
-    allowNull: true,
-    comment: 'View hiện tại (main, scoreboard, bracket, standings, etc.)',
-  },
   round: {
     type: DataTypes.INTEGER,
     allowNull: true,
@@ -97,19 +92,10 @@ const DisplaySetting = sequelize.define('DisplaySetting', {
       fields: ['code_logo'],
     },
     {
-      fields: ['currentView'],
-    },
-    {
       fields: ['round'],
     },
     {
       fields: ['group'],
-    },
-    {
-      fields: ['currentView', 'round'],
-    },
-    {
-      fields: ['currentView', 'group'],
     },
   ],
 });

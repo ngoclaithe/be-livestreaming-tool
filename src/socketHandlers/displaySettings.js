@@ -38,6 +38,9 @@ async function updateMatchInfo(accessCode, matchInfo) {
     if (matchInfo.tournament !== undefined) {
       updates.tournamentName = matchInfo.tournament;
     }
+    if (matchInfo.commentator !== undefined) {
+      updates.commentator = matchInfo.commentator;
+    }
     if (matchInfo.stadium !== undefined) {
       updates.venue = matchInfo.stadium;
       updates.location = matchInfo.stadium;
@@ -634,7 +637,7 @@ function handleDisplaySettings(io, socket, rooms, userSessions) {
   });
 
   socket.on('match_info_update', async (data) => {
-    // console.log("Giá trị match_info_update là:", data);
+    console.log("Giá trị match_info_update là:", data);
     try {
       const { accessCode, matchInfo, timestamp = Date.now() } = data;
   
@@ -654,15 +657,7 @@ function handleDisplaySettings(io, socket, rooms, userSessions) {
   
       // Cập nhật database trước
       const updatedMatch = await updateMatchInfo(accessCode, matchInfo);
-      console.log("🔍 updatedMatch từ database:", {
-        teamAkitcolor: updatedMatch.teamAkitcolor,
-        teamBkitcolor: updatedMatch.teamBkitcolor,  
-        teamA2kitcolor: updatedMatch.teamA2kitcolor,
-        teamB2kitcolor: updatedMatch.teamB2kitcolor
-      });
-  
-
-      const regularFields = ['tournament', 'stadium', 'matchDate', 'liveText', 'startTime', 'matchTitle'];
+      const regularFields = ['tournament', 'stadium', 'matchDate', 'liveText', 'startTime', 'matchTitle', 'commentator'];
       regularFields.forEach(field => {
         if (matchInfo[field] !== undefined) {
           room.currentState.matchData[field] = matchInfo[field];
@@ -671,37 +666,29 @@ function handleDisplaySettings(io, socket, rooms, userSessions) {
   
       if (updatedMatch.teamAkitcolor !== undefined) {
         room.currentState.matchData.teamA.teamAKitColor = updatedMatch.teamAkitcolor;
-        console.log(`✅ Synced teamA.teamAKitColor = ${updatedMatch.teamAkitcolor}`);
       }
       if (updatedMatch.teamBkitcolor !== undefined) {
         room.currentState.matchData.teamB.teamBKitColor = updatedMatch.teamBkitcolor;
-        console.log(`✅ Synced teamB.teamBKitColor = ${updatedMatch.teamBkitcolor}`);
       }
       if (updatedMatch.teamA2kitcolor !== undefined) {
         room.currentState.matchData.teamA.teamA2KitColor = updatedMatch.teamA2kitcolor;
-        console.log(`✅ Synced teamA.teamA2KitColor = ${updatedMatch.teamA2kitcolor}`);
       }
       if (updatedMatch.teamB2kitcolor !== undefined) {
         room.currentState.matchData.teamB.teamB2KitColor = updatedMatch.teamB2kitcolor;
-        console.log(`✅ Synced teamB.teamB2KitColor = ${updatedMatch.teamB2kitcolor}`);
       }
   
-      console.log("🔍 SAU SYNC - room.currentState.matchData.teamA:", room.currentState.matchData.teamA);
-      console.log("🔍 SAU SYNC - room.currentState.matchData.teamB:", room.currentState.matchData.teamB);
+      // console.log("🔍 SAU SYNC - room.currentState.matchData.teamA:", room.currentState.matchData.teamA);
+      // console.log("🔍 SAU SYNC - room.currentState.matchData.teamB:", room.currentState.matchData.teamB);
   
       room.lastActivity = timestamp;
-  
-      // Tạo response object
       const responseMatchInfo = {};
       
-      // Các field thông thường
       regularFields.forEach(field => {
         if (room.currentState.matchData[field] !== undefined) {
           responseMatchInfo[field] = room.currentState.matchData[field];
         }
       });
       
-      // Lấy kit colors từ room state (đã được sync từ database)
       if (room.currentState.matchData.teamA?.teamAKitColor !== undefined) {
         responseMatchInfo.teamAkitcolor = room.currentState.matchData.teamA.teamAKitColor;
       }
@@ -715,7 +702,6 @@ function handleDisplaySettings(io, socket, rooms, userSessions) {
         responseMatchInfo.teamB2kitcolor = room.currentState.matchData.teamB.teamB2KitColor;
       }
       
-      // Gửi thông tin match
       responseMatchInfo.matchId = updatedMatch.id;
       responseMatchInfo.updatedAt = updatedMatch.updatedAt;
   
@@ -729,10 +715,6 @@ function handleDisplaySettings(io, socket, rooms, userSessions) {
   
     } catch (error) {
       logger.error('Error in match_info_update:', error);
-      socket.emit('match_info_error', {
-        error: error.message,
-        details: 'Failed to update match info'
-      });
     }
   });
 

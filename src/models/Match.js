@@ -244,6 +244,11 @@ const Match = sequelize.define('Match', {
     allowNull: true,
     comment: 'Additional information in JSON format',
   },
+  commentator: {
+    type: DataTypes.STRING(100),
+    allowNull: true,
+    comment: 'Tên Bình Luận Viên',
+  },  
   createdBy: {
     type: DataTypes.INTEGER,
     allowNull: false,
@@ -283,7 +288,6 @@ const Match = sequelize.define('Match', {
   }
 });
 
-// Instance methods
 Match.prototype.updateScore = function(homeScore, awayScore) {
   this.homeScore = homeScore;
   this.awayScore = awayScore;
@@ -295,7 +299,6 @@ Match.prototype.updateStatus = function(status) {
   return this.save();
 };
 
-// New methods for scorers
 Match.prototype.addScorer = function(team, playerName, minute) {
   const teamField = team === 'A' ? 'teamAScorers' : 'teamBScorers';
   
@@ -303,16 +306,13 @@ Match.prototype.addScorer = function(team, playerName, minute) {
     this[teamField] = [];
   }
   
-  // Find existing player
   const existingPlayer = this[teamField].find(scorer => scorer.player === playerName);
   
   if (existingPlayer) {
-    // Add minute to existing player's score
     const scores = existingPlayer.score ? existingPlayer.score.split(',') : [];
     scores.push(minute.toString());
     existingPlayer.score = scores.join(',');
   } else {
-    // Add new player
     this[teamField].push({
       player: playerName,
       score: minute.toString()
@@ -346,12 +346,10 @@ Match.getUpcomingMatches = function(limit = 10) {
 Match.prototype.addScorer = function(team, playerName, minute) {
   const teamField = team === 'A' || team === 'teamA' ? 'teamAScorers' : 'teamBScorers';
   
-  // Initialize if null or undefined
   if (!this[teamField]) {
     this[teamField] = [];
   }
   
-  // Ensure it's an array (in case it was stored as string)
   if (typeof this[teamField] === 'string') {
     try {
       this[teamField] = JSON.parse(this[teamField]);
@@ -360,29 +358,24 @@ Match.prototype.addScorer = function(team, playerName, minute) {
     }
   }
   
-  // Find existing player
   const existingPlayer = this[teamField].find(scorer => scorer.player === playerName);
   
   if (existingPlayer) {
-    // Add minute to existing player's score
     const scores = existingPlayer.score ? existingPlayer.score.split(',') : [];
     scores.push(minute.toString());
     existingPlayer.score = scores.join(',');
   } else {
-    // Add new player
     this[teamField].push({
       player: playerName,
       score: minute.toString()
     });
   }
   
-  // Mark as changed for Sequelize to detect the update
   this.changed(teamField, true);
   
   return this.save();
 };
 
-// Thêm method để xóa một bàn thắng
 Match.prototype.removeScorer = function(team, playerName, minute) {
   const teamField = team === 'A' || team === 'teamA' ? 'teamAScorers' : 'teamBScorers';
   
@@ -390,7 +383,6 @@ Match.prototype.removeScorer = function(team, playerName, minute) {
     return this.save();
   }
   
-  // Find the player
   const existingPlayer = this[teamField].find(scorer => scorer.player === playerName);
   
   if (existingPlayer) {
@@ -398,14 +390,11 @@ Match.prototype.removeScorer = function(team, playerName, minute) {
     const updatedScores = scores.filter(score => score !== minute.toString());
     
     if (updatedScores.length === 0) {
-      // Remove player if no more scores
       this[teamField] = this[teamField].filter(scorer => scorer.player !== playerName);
     } else {
-      // Update player's scores
       existingPlayer.score = updatedScores.join(',');
     }
     
-    // Mark as changed for Sequelize
     this.changed(teamField, true);
   }
   

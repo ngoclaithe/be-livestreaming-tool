@@ -146,9 +146,50 @@ function handleMatchData(io, socket, rooms, userSessions) {
             });
         }
     });
+    socket.on('commentator_update', async (data) => {
+        try {
+            const { accessCode, commentator } = data;
+
+            if (!accessCode) {
+                throw new Error('Mã truy cập không hợp lệ');
+            }
+
+            const room = rooms.get(accessCode);
+            if (!room) {
+                logger.error(`Room not found for access code: ${accessCode}`, { socketId: socket.id });
+            }
+
+            const userData = userSessions.get(socket.id);
+            if (!userData || !room.adminClients.has(socket.id)) {
+                logger.error(`Unauthorized access attempt for room: ${accessCode}`, { socketId: socket.id });
+                return;
+            }
+
+            const result = await updateMatchInDatabase(accessCode, { commentator });
+            if (!result.success) {
+                throw new Error(result.error || 'Không thể cập nhật commentator');
+            }
+
+            room.currentState.matchData.commentator = commentator || null;
+
+            io.to(`room_${accessCode}`).emit('commentator_updated', {
+                commentator: room.currentState.matchData.commentator,
+                timestamp: Date.now()
+            });
+
+        } catch (error) {
+            logger.error(`Commentator update error: ${error.message}`, {
+                error: error.toString(),
+                stack: error.stack,
+                socketId: socket.id,
+                data: data
+            });
+        }
+    });
+
 
     socket.on('match_title_update', async (data) => {
-        console.log('Giá trị match_title_update là:', data);
+        // console.log('Giá trị match_title_update là:', data);
         try {
             const { accessCode, matchTitle, timestamp = Date.now() } = data;
 

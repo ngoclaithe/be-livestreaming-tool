@@ -80,7 +80,6 @@ const Poster = sequelize.define('Poster', {
   ]
 });
 
-// Phương thức tùy chỉnh
 Poster.findByAccessCode = function(accessCode) {
   return this.findOne({
     where: { accessCode }

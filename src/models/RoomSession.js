@@ -1,7 +1,6 @@
     const { DataTypes } = require('sequelize');
     const { sequelize } = require('../config/database');
 
-    // Định nghĩa model
     const RoomSession = sequelize.define('RoomSession', {
         id: {
             type: DataTypes.INTEGER,

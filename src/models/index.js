@@ -10,6 +10,7 @@ const PaymentAccessCode = require('./PaymentAccessCode');
 const InfoPayment = require('./InfoPayment');
 const Activity = require('./Activity');
 const Poster = require('./Poster');
+const View = require('./View');
 
 function setupAssociations() {
   try {
@@ -124,6 +125,13 @@ function setupAssociations() {
       onUpdate: 'CASCADE'
     });
 
+    AccessCode.hasOne(View, {
+      foreignKey: 'accessCodeId',
+      as: 'view',
+      onDelete: 'CASCADE',
+      onUpdate: 'CASCADE'
+    });
+
     // RoomSession belongs to AccessCode
     RoomSession.belongsTo(AccessCode, {
       foreignKey: 'accessCodeId',
@@ -197,6 +205,12 @@ function setupAssociations() {
       targetKey: 'code',
       as: 'accessCodeData'
     });
+
+    View.belongsTo(AccessCode, {
+      foreignKey: 'accessCodeId',
+      as: 'accessCode'
+    });
+
     console.log('Model associations set up successfully');
     return true;
   } catch (error) {
@@ -239,6 +253,7 @@ async function initModels() {
       { model: InfoPayment, name: 'InfoPayment' },
       { model: Activity, name: 'Activity' },
       { model: Poster, name: 'Poster' },
+      { model: View, name: 'View' },
     ];
 
     for (const { model, name } of models) {
@@ -310,6 +325,7 @@ module.exports = {
   PlayerList,
   Activity,
   Poster,
+  View,
   initModels,
   setupAssociations,
   closeDatabase

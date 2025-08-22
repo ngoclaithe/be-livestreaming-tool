@@ -1,5 +1,5 @@
 const logger = require('../utils/logger');
-const { sequelize, RoomSession, Match, AccessCode, DisplaySetting, PlayerList } = require('../models');
+const { sequelize, RoomSession, Match, AccessCode, DisplaySetting, PlayerList, View, Poster } = require('../models');
 const { Op } = require('sequelize');
 
 let globalExpirationChecker = null;
@@ -33,7 +33,7 @@ function createNewRoom(accessCode) {
         stadium: "",
         matchDate: "",
         liveText: "",
-        typeMatch: "" 
+        typeMatch: ""
       },
       matchStats: {
         possession: { team1: 0, team2: 0 },
@@ -89,9 +89,14 @@ async function loadRoomData(accessCode) {
       where: { accessCode: accessCode }
     });
 
+    const view = await View.findOne({
+      where: { accessCodeId: accessCodeData.id }
+    });
+
     const roomData = {
       match: null,
-      displaySettings: displaySettings || []
+      displaySettings: displaySettings || [],
+      view: view || null
     };
 
     if (accessCodeData && accessCodeData.match) {
@@ -123,11 +128,12 @@ async function loadRoomData(accessCode) {
         stadium: match.venue || match.location || "",
         matchDate: match.matchDate,
         status: match.status,
-        typeMatch: match.typeMatch, 
+        typeMatch: match.typeMatch,
         matchTitle: match.match_title,
         referee: match.referee,
         attendance: match.attendance,
         liveText: match.live_unit,
+        commentator: match.commentator,
         stats: {
           possession: {
             team1: match.teamAPossession || 0,
@@ -173,14 +179,14 @@ function mergeRoomDataWithState(roomState, loadedData) {
     const match = loadedData.match;
     // console.log("giá trị khi load xong match là:", match);
     // console.log("typeMatch từ database:", match.typeMatch);
-
+    roomState.currentState.view = loadedData.view ? loadedData.view.currentView : 'poster';
     roomState.currentState.matchData = {
       teamA: {
         name: match.teamA.name,
         score: match.teamA.score,
         scoreSet: match.teamA.scoreSet || 0,
         logo: match.teamA.logo,
-        teamAKitColor: match.teamA.kitColor,    
+        teamAKitColor: match.teamA.kitColor,
         teamA2KitColor: match.teamA.kit2Color,
         scorers: match.teamA.scorers || [],
         futsalFouls: match.teamA.futsalFouls || 0
@@ -190,7 +196,7 @@ function mergeRoomDataWithState(roomState, loadedData) {
         score: match.teamB.score,
         scoreSet: match.teamB.scoreSet || 0,
         logo: match.teamB.logo,
-        teamBKitColor: match.teamB.kitColor,    
+        teamBKitColor: match.teamB.kitColor,
         teamB2KitColor: match.teamB.kit2Color,
         scorers: match.teamB.scorers || [],
         futsalFouls: match.teamB.futsalFouls || 0
@@ -203,7 +209,8 @@ function mergeRoomDataWithState(roomState, loadedData) {
       matchDate: match.matchDate ? new Date(match.matchDate).toLocaleDateString() : "",
       liveText: match.liveText || roomState.currentState.matchData.liveText,
       matchTitle: match.matchTitle || roomState.currentState.matchData.matchTitle || "",
-      typeMatch: match.typeMatch || "" 
+      typeMatch: match.typeMatch || "",
+      commentator: match.commentator || "",
     };
 
     if (match.stats) {
@@ -225,12 +232,12 @@ function mergeRoomDataWithState(roomState, loadedData) {
           team2: match.stats.corners.team2 || 0
         },
         yellowCards: {
-          team1: match.stats.yellowCards.team1 || [],  
-          team2: match.stats.yellowCards.team2 || []   
+          team1: match.stats.yellowCards.team1 || [],
+          team2: match.stats.yellowCards.team2 || []
         },
         redCards: {
-          team1: match.stats.redCards.team1 || [],     
-          team2: match.stats.redCards.team2 || []      
+          team1: match.stats.redCards.team1 || [],
+          team2: match.stats.redCards.team2 || []
         },
         fouls: {
           team1: match.stats.fouls.team1 || 0,
@@ -250,6 +257,11 @@ function mergeRoomDataWithState(roomState, loadedData) {
       urlLogo: setting.url_logo,
       metadata: setting.metadata
     }));
+  }
+  if (loadedData.view) {
+    roomState.currentState.displaySettings.url_custom_poster = loadedData.view.url_custom_poster || roomState.currentState.displaySettings.custom_url_poster;
+    roomState.currentState.displaySettings.selectedSkin = loadedData.view.templateId || roomState.currentState.displaySettings.selectedSkin;
+    roomState.currentState.displaySettings.selectedPoster = loadedData.view.poster_type || roomState.currentState.displaySettings.selectedPoster;
   }
 
   return roomState;
@@ -350,7 +362,7 @@ function initializeGlobalExpirationChecker(io, rooms) {
     } catch (error) {
       logger.error('Error in global expiration checker:', error);
     }
-  }, 5 * 60 * 1000); 
+  }, 5 * 60 * 1000);
 }
 
 async function checkRoomExpirationOnActivity(accessCode) {
@@ -605,7 +617,7 @@ function handleRoomManagement(io, socket, rooms, userSessions) {
         isAdmin: clientType === 'admin',
         expiredAt: roomSession.expiredAt,
         dataSynced: accessCodeData.status === 'active' || accessCodeData.status === 'used',
-        typeMatch: room.currentState.matchData.typeMatch 
+        typeMatch: room.currentState.matchData.typeMatch
       };
 
       socket.emit('room_joined', response);
