@@ -6,27 +6,100 @@ const crypto = require('crypto');
 const logger = require('../utils/logger');
 const config = require('../config');
 const jwt = require('jsonwebtoken');
-const { Op } = require('sequelize'); 
+const { Op } = require('sequelize');
 
-// @desc    Register user
-// @route   POST /api/v1/auth/register
-// @access  Public
+const validatePassword = (password) => {
+  const errors = [];
+  if (!password) {
+    errors.push('Mật khẩu là bắt buộc');
+  } else {
+    if (password.length < 8) {
+      errors.push('Mật khẩu phải có ít nhất 8 ký tự');
+    }
+    if (password.length > 128) {
+      errors.push('Mật khẩu không được vượt quá 128 ký tự');
+    }
+    if (!/(?=.*[a-z])/.test(password)) {
+      errors.push('Mật khẩu phải chứa ít nhất một chữ cái thường');
+    }
+    if (!/(?=.*[A-Z])/.test(password)) {
+      errors.push('Mật khẩu phải chứa ít nhất một chữ cái hoa');
+    }
+    if (!/(?=.*\d)/.test(password)) {
+      errors.push('Mật khẩu phải chứa ít nhất một chữ số');
+    }
+    if (!/(?=.*[!@#$%^&*])/.test(password)) {
+      errors.push('Mật khẩu phải chứa ít nhất một ký tự đặc biệt (!@#$%^&*)');
+    }
+  }
+  return errors;
+};
+
+const validateEmail = (email) => {
+  const errors = [];
+  if (!email) {
+    errors.push('Email là bắt buộc');
+  } else {
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      errors.push('Email không hợp lệ');
+    }
+  }
+  return errors;
+};
+
+const validateName = (name) => {
+  const errors = [];
+  if (!name) {
+    errors.push('Tên là bắt buộc');
+  } else {
+    if (name.trim().length < 2) {
+      errors.push('Tên phải có ít nhất 2 ký tự');
+    }
+    if (name.trim().length > 50) {
+      errors.push('Tên không được vượt quá 50 ký tự');
+    }
+  }
+  return errors;
+};
+
 exports.register = async (req, res, next) => {
   try {
     const { name, email, password, role } = req.body;
 
+    const validationErrors = [];
+    
+    validationErrors.push(...validateName(name));
+    validationErrors.push(...validateEmail(email));
+    validationErrors.push(...validatePassword(password));
+
+    if (email) {
+      const existingUser = await User.findOne({ where: { email } });
+      if (existingUser) {
+        validationErrors.push('Email này đã được sử dụng');
+      }
+    }
+
+    if (validationErrors.length > 0) {
+      return res.status(StatusCodes.BAD_REQUEST).json({
+        success: false,
+        message: 'Dữ liệu đầu vào không hợp lệ',
+        errors: validationErrors
+      });
+    }
+
     const user = await User.create({
-      name,
-      email,
+      name: name.trim(),
+      email: email.toLowerCase(),
       password,
       role: role || 'user'
     });
 
-    // Create token
     const token = user.getSignedJwtToken();
 
     res.status(StatusCodes.CREATED).json({
       success: true,
+      message: 'Đăng ký thành công',
       token,
       user: {
         id: user.id, 
@@ -42,48 +115,63 @@ exports.register = async (req, res, next) => {
   }
 };
 
-// @desc    Login user
-// @route   POST /api/v1/auth/login
-// @access  Public
 exports.login = async (req, res, next) => {
   try {
     const { email, password } = req.body;
 
-    if (!email || !password) {
-      return next(
-        new ApiError('Vui lòng nhập email và mật khẩu', StatusCodes.BAD_REQUEST)
-      );
+    const validationErrors = [];
+    
+    if (!email) {
+      validationErrors.push('Email là bắt buộc');
+    }
+    if (!password) {
+      validationErrors.push('Mật khẩu là bắt buộc');
+    }
+
+    if (validationErrors.length > 0) {
+      return res.status(StatusCodes.BAD_REQUEST).json({
+        success: false,
+        message: 'Thông tin đăng nhập không đầy đủ',
+        errors: validationErrors
+      });
     }
 
     const user = await User.findOne({
-      where: { email },
-      attributes: { include: ['password'] }     });
+      where: { email: email.toLowerCase() },
+      attributes: { include: ['password'] }
+    });
 
     if (!user) {
-      return next(
-        new ApiError('Thông tin đăng nhập không chính xác', StatusCodes.UNAUTHORIZED)
-      );
+      return res.status(StatusCodes.UNAUTHORIZED).json({
+        success: false,
+        message: 'Thông tin đăng nhập không chính xác',
+        errors: ['Email hoặc mật khẩu không đúng']
+      });
     }
 
     const isMatch = await user.matchPassword(password);
 
     if (!isMatch) {
-      return next(
-        new ApiError('Thông tin đăng nhập không chính xác', StatusCodes.UNAUTHORIZED)
-      );
+      return res.status(StatusCodes.UNAUTHORIZED).json({
+        success: false,
+        message: 'Thông tin đăng nhập không chính xác',
+        errors: ['Email hoặc mật khẩu không đúng']
+      });
     }
 
     if (!user.is_active) {
-      return next(
-        new ApiError('Tài khoản của bạn đã bị khóa', StatusCodes.FORBIDDEN)
-      );
+      return res.status(StatusCodes.FORBIDDEN).json({
+        success: false,
+        message: 'Tài khoản bị khóa',
+        errors: ['Tài khoản của bạn đã bị khóa, vui lòng liên hệ quản trị viên']
+      });
     }
 
-    // Create token
     const token = user.getSignedJwtToken();
 
     res.status(StatusCodes.OK).json({
       success: true,
+      message: 'Đăng nhập thành công',
       token,
       user: {
         id: user.id, 
@@ -99,9 +187,6 @@ exports.login = async (req, res, next) => {
   }
 };
 
-// @desc    Get current logged in user
-// @route   GET /api/v1/auth/me
-// @access  Private
 exports.getMe = async (req, res, next) => {
   try {
     const user = await User.findOne({
@@ -112,13 +197,16 @@ exports.getMe = async (req, res, next) => {
     });
     
     if (!user) {
-      return next(
-        new ApiError('Không tìm thấy người dùng hoặc tài khoản đã bị khóa', StatusCodes.NOT_FOUND)
-      );
+      return res.status(StatusCodes.NOT_FOUND).json({
+        success: false,
+        message: 'Không tìm thấy thông tin người dùng',
+        errors: ['Không tìm thấy người dùng hoặc tài khoản đã bị khóa']
+      });
     }
 
     res.status(StatusCodes.OK).json({
       success: true,
+      message: 'Lấy thông tin người dùng thành công',
       data: {
         id: user.id, 
         name: user.name,
@@ -134,29 +222,53 @@ exports.getMe = async (req, res, next) => {
   }
 };
 
-// @desc    Update user details
-// @route   PUT /api/v1/auth/updatedetails
-// @access  Private
 exports.updateDetails = async (req, res, next) => {
   try {
-    const fieldsToUpdate = {
-      name: req.body.name,
-      email: req.body.email
-    };
+    const { name, email } = req.body;
+    
+    const validationErrors = [];
+    
+    if (name !== undefined) {
+      validationErrors.push(...validateName(name));
+    }
+    
+    if (email !== undefined) {
+      validationErrors.push(...validateEmail(email));
+      
+      const existingUser = await User.findOne({ 
+        where: { 
+          email: email.toLowerCase(),
+          id: { [Op.ne]: req.user.id }
+        }
+      });
+      if (existingUser) {
+        validationErrors.push('Email này đã được sử dụng bởi người dùng khác');
+      }
+    }
 
-    // Sử dụng Sequelize syntax
-    const [updatedRowsCount] = await User.update(fieldsToUpdate, {
-      where: { id: req.user.id },
-      returning: true // PostgreSQL only, for other DB use separate findOne
+    if (validationErrors.length > 0) {
+      return res.status(StatusCodes.BAD_REQUEST).json({
+        success: false,
+        message: 'Dữ liệu cập nhật không hợp lệ',
+        errors: validationErrors
+      });
+    }
+
+    const fieldsToUpdate = {};
+    if (name !== undefined) fieldsToUpdate.name = name.trim();
+    if (email !== undefined) fieldsToUpdate.email = email.toLowerCase();
+
+    await User.update(fieldsToUpdate, {
+      where: { id: req.user.id }
     });
 
-    // Lấy user đã update
     const user = await User.findOne({
       where: { id: req.user.id }
     });
 
     res.status(StatusCodes.OK).json({
       success: true,
+      message: 'Cập nhật thông tin thành công',
       data: user
     });
   } catch (error) {
@@ -165,42 +277,58 @@ exports.updateDetails = async (req, res, next) => {
   }
 };
 
-// @desc    Update password
-// @route   PUT /api/v1/auth/updatepassword
-// @access  Private
 exports.updatePassword = async (req, res, next) => {
   try {
-    // Sử dụng Sequelize syntax để lấy user với password
+    const { currentPassword, newPassword } = req.body;
+    
+    const validationErrors = [];
+    
+    if (!currentPassword) {
+      validationErrors.push('Mật khẩu hiện tại là bắt buộc');
+    }
+    
+    validationErrors.push(...validatePassword(newPassword));
+
+    if (validationErrors.length > 0) {
+      return res.status(StatusCodes.BAD_REQUEST).json({
+        success: false,
+        message: 'Dữ liệu thay đổi mật khẩu không hợp lệ',
+        errors: validationErrors
+      });
+    }
+
     const user = await User.findOne({
       where: { id: req.user.id },
       attributes: { include: ['password'] }
     });
 
     if (!user) {
-      return next(
-        new ApiError('Không tìm thấy người dùng', StatusCodes.NOT_FOUND)
-      );
+      return res.status(StatusCodes.NOT_FOUND).json({
+        success: false,
+        message: 'Không tìm thấy người dùng',
+        errors: ['Không tìm thấy thông tin người dùng']
+      });
     }
 
-    // Check current password
-    if (!(await user.matchPassword(req.body.currentPassword))) {
-      return next(
-        new ApiError('Mật khẩu hiện tại không đúng', StatusCodes.UNAUTHORIZED)
-      );
+    if (!(await user.matchPassword(currentPassword))) {
+      return res.status(StatusCodes.UNAUTHORIZED).json({
+        success: false,
+        message: 'Mật khẩu hiện tại không đúng',
+        errors: ['Mật khẩu hiện tại không chính xác']
+      });
     }
 
-    // Update password
-    user.password = req.body.newPassword;
+    user.password = newPassword;
     await user.save();
 
-    // Create token
     const token = user.getSignedJwtToken();
 
     res.status(StatusCodes.OK).json({
       success: true,
+      message: 'Thay đổi mật khẩu thành công',
       token,
       user: {
-        id: user.id, // Sử dụng user.id thay vì user._id
+        id: user.id,
         name: user.name,
         email: user.email,
         role: user.role,
@@ -213,37 +341,46 @@ exports.updatePassword = async (req, res, next) => {
   }
 };
 
-// @desc    Forgot password
-// @route   POST /api/v1/auth/forgotpassword
-// @access  Public
 exports.forgotPassword = async (req, res, next) => {
   try {
+    const { email } = req.body;
+    
+    const validationErrors = validateEmail(email);
+    
+    if (validationErrors.length > 0) {
+      return res.status(StatusCodes.BAD_REQUEST).json({
+        success: false,
+        message: 'Email không hợp lệ',
+        errors: validationErrors
+      });
+    }
+
     const user = await User.findOne({ 
-      where: { email: req.body.email } // Sử dụng Sequelize syntax
+      where: { email: email.toLowerCase() }
     });
 
     if (!user) {
-      return next(
-        new ApiError('Không tìm thấy người dùng với email này', StatusCodes.NOT_FOUND)
-      );
+      return res.status(StatusCodes.NOT_FOUND).json({
+        success: false,
+        message: 'Không tìm thấy người dùng',
+        errors: ['Không tìm thấy người dùng với email này']
+      });
     }
 
-    // Get reset token
     const resetToken = user.getResetPasswordToken();
 
-    await user.save({ validate: false }); // Sequelize syntax
+    await user.save({ validate: false });
 
-    // Create reset URL
     const resetUrl = `${req.protocol}://${req.get(
       'host'
     )}/api/v1/auth/resetpassword/${resetToken}`;
 
-    // TODO: Send email with reset URL
     console.log(`Reset Password URL: ${resetUrl}`);
 
     res.status(StatusCodes.OK).json({
       success: true,
-      data: 'Email đặt lại mật khẩu đã được gửi'
+      message: 'Email đặt lại mật khẩu đã được gửi thành công',
+      data: 'Vui lòng kiểm tra email để đặt lại mật khẩu'
     });
   } catch (error) {
     logger.error(`Forgot password error: ${error.message}`);
@@ -256,18 +393,25 @@ exports.forgotPassword = async (req, res, next) => {
   }
 };
 
-// @desc    Reset password
-// @route   PUT /api/v1/auth/resetpassword/:resettoken
-// @access  Public
 exports.resetPassword = async (req, res, next) => {
   try {
-    // Get hashed token
+    const { password } = req.body;
+    
+    const validationErrors = validatePassword(password);
+    
+    if (validationErrors.length > 0) {
+      return res.status(StatusCodes.BAD_REQUEST).json({
+        success: false,
+        message: 'Mật khẩu mới không hợp lệ',
+        errors: validationErrors
+      });
+    }
+
     const resetPasswordToken = crypto
       .createHash('sha256')
       .update(req.params.resettoken)
       .digest('hex');
 
-    // Sử dụng Sequelize syntax với Op.gt
     const user = await User.findOne({
       where: {
         resetPasswordToken,
@@ -276,23 +420,26 @@ exports.resetPassword = async (req, res, next) => {
     });
 
     if (!user) {
-      return next(new ApiError('Token không hợp lệ hoặc đã hết hạn', StatusCodes.BAD_REQUEST));
+      return res.status(StatusCodes.BAD_REQUEST).json({
+        success: false,
+        message: 'Token không hợp lệ',
+        errors: ['Token không hợp lệ hoặc đã hết hạn']
+      });
     }
 
-    // Set new password
-    user.password = req.body.password;
+    user.password = password;
     user.resetPasswordToken = undefined;
     user.resetPasswordExpire = undefined;
     await user.save();
 
-    // Create token
     const token = user.getSignedJwtToken();
 
     res.status(StatusCodes.OK).json({
       success: true,
+      message: 'Đặt lại mật khẩu thành công',
       token,
       user: {
-        id: user.id, // Sử dụng user.id thay vì user._id
+        id: user.id,
         name: user.name,
         email: user.email,
         role: user.role,
@@ -305,12 +452,8 @@ exports.resetPassword = async (req, res, next) => {
   }
 };
 
-// @desc    Logout user / clear cookie
-// @route   GET /api/v1/auth/logout
-// @access  Private
 exports.logout = async (req, res, next) => {
   try {
-    // Add token to blacklist
     const redisClient = getRedisClient();
     const token = req.headers.authorization?.split(' ')[1];
     
@@ -327,6 +470,7 @@ exports.logout = async (req, res, next) => {
 
     res.status(StatusCodes.OK).json({
       success: true,
+      message: 'Đăng xuất thành công',
       data: {}
     });
   } catch (error) {
